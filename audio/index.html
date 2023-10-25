@@ -18,18 +18,18 @@
       event.stopPropagation();
       event.preventDefault();
   
-      if (isWebBluetoothEnabled()) {
+    //   if (isWebBluetoothEnabled()) {
         ChromeSamples.clearLog();
         onStartButtonClick();
-      }
+    //   }
     });
     document.querySelector('#stopNotifications').addEventListener('click', function(event) {
       event.stopPropagation();
       event.preventDefault();
   
-      if (isWebBluetoothEnabled()) {
+    //   if (isWebBluetoothEnabled()) {
         onStopButtonClick();
-      }
+    //   }
     });
   </script>
 
