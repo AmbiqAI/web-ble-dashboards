@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Web BLE Audio Test</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+
+<body>
+    <form>
+        <button id="startNotifications">Start notifications</button>
+        <button id="stopNotifications">Stop notifications</button>
+      </form>
+</body>
+
+<script>
+    document.querySelector('#startNotifications').addEventListener('click', function(event) {
+      event.stopPropagation();
+      event.preventDefault();
+  
+      if (isWebBluetoothEnabled()) {
+        ChromeSamples.clearLog();
+        onStartButtonClick();
+      }
+    });
+    document.querySelector('#stopNotifications').addEventListener('click', function(event) {
+      event.stopPropagation();
+      event.preventDefault();
+  
+      if (isWebBluetoothEnabled()) {
+        onStopButtonClick();
+      }
+    });
+  </script>
+
+<script>
+
+    const serviceUuid =        '19690000-0000-1234-abcd-5678aabb1011';
+    const characteristicUuid = '19690000-5001-1234-abcd-5678aabb1011';
+
+    let myCharacteristic;
+    let myValue = 0;
+    let myBLE;
+
+    function onStartButtonClick() {
+        console.log('Requesting Bluetooth Device...');
+        navigator.bluetooth.requestDevice({
+            filters: [{
+                services: [serviceUuid]
+            }]
+        })
+        .then(device => {
+            console.log('Connecting to GATT Server...');
+            return device.gatt.connect();
+        })
+        .then(server => {
+            console.log('Getting Service...');
+            return server.getPrimaryService(serviceUuid);
+        })
+        .then(service => {
+            console.log('Getting Characteristic...');
+            return service.getCharacteristic(characteristicUuid);
+        })
+        .then(characteristic => {
+            myCharacteristic = characteristic;
+            return myCharacteristic.startNotifications().then(_ => {
+                console.log('> Notifications started');
+                myCharacteristic.addEventListener('characteristicvaluechanged',
+                    handleNotifications);
+            });
+        })
+        .catch(error => {
+            console.log('Argh! ' + error);
+        });
+    }
+
+    function onStopButtonClick() {
+        if (myCharacteristic) {
+            myCharacteristic.stopNotifications()
+                .then(_ => {
+                    console.log('> Notifications stopped');
+                    myCharacteristic.removeEventListener('characteristicvaluechanged',
+                        handleNotifications);
+                })
+                .catch(error => {
+                    console.log('Argh! ' + error);
+                });
+        }
+    }
+
+    function handleNotifications(event) {
+        let value = event.target.value;
+        console.log(value);
+        let a = [];
+        for (let i = 0; i < value.byteLength; i++) {
+            a.push(value.getUint8(i));
+        }
+        console.log('> ' + a.join(', '));
+    }
+</script>
