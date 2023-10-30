@@ -19,7 +19,7 @@
       event.preventDefault();
   
     //   if (isWebBluetoothEnabled()) {
-        ChromeSamples.clearLog();
+        // ChromeSamples.clearLog();
         onStartButtonClick();
     //   }
     });
@@ -33,10 +33,26 @@
     });
   </script>
 
-<script>
+<!-- <script src="opus-decoder.min.js"></script> -->
 
+<script>
+    // import { OpusDecoder } from './node_modules/opus-decoder/dist/opus-decoder.min.js';
+    // import { OpusDecoder } from 'node_modules/opus-decoder';
     const serviceUuid =        '19690000-0000-1234-abcd-5678aabb1011';
     const characteristicUuid = '19690000-5001-1234-abcd-5678aabb1011';
+    let audioContext;
+    let audioDecoder = new AudioDecoder({output: playAudio, error: onAudioError});
+    // await audioDecoder.configure({
+    //     codec: "opus",
+    //     sampleRate: 16000,
+    //     numberOfChannels: 1
+    // });
+
+    // const { OpusDecoder } = window["opus-decoder"];
+
+    // const oDecoder = new OpusDecoder();
+    // const oDecoder = new window["opus-decoder"].OpusDecoder({sampleRate: 16000, channels: 1});
+    // await oDecoder.ready;
 
     let myCharacteristic;
     let myValue = 0;
@@ -64,6 +80,8 @@
         .then(characteristic => {
             myCharacteristic = characteristic;
             return myCharacteristic.startNotifications().then(_ => {
+                audioContext = new AudioContext({sampleRate: 16000});
+                // oDecoder = new OpusDecoder({sampleRate: 16000, channels: 1});
                 console.log('> Notifications started');
                 myCharacteristic.addEventListener('characteristicvaluechanged',
                     handleNotifications);
@@ -88,13 +106,80 @@
         }
     }
 
-    function handleNotifications(event) {
-        let value = event.target.value;
-        console.log(value);
-        let a = [];
-        for (let i = 0; i < value.byteLength; i++) {
-            a.push(value.getUint8(i));
-        }
-        console.log('> ' + a.join(', '));
+    function playAudio (audioData) { // AudioData object
+        const audioBuffer = audioContext.createBuffer(1, 960, 16000);
+        const buffer = audioBuffer.getChannelData(0); // Get the array
+        const source = audioContext.createBufferSource(); // AudioBuffer source node
+        audioData.copyTo(buffer, {planeIndex: 0}); // copy AudioData to AudioBuffer Channel
+        // for (let i = 0; i < 80; i++) {
+        //     buffer[i] = audioData.getFloat32(i);
+        // }
+
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        source.start();
     }
+
+    function onAudioError(error) {
+        console.log(error);
+    }
+
+    function handleNotifications(event) {
+        let value = event.target.value; // This is a DataView, I think
+        // const channelCount = 1;
+        // const bufferDurationS = .02;
+
+        //  Decode the audio data from the Opus frame
+        const init = {
+            type: "key",
+            data: value,
+            timestamp: 0,
+            duration: 20000,
+        };
+        const decoderConfig = {
+            codec: "opus",
+            sampleRate: 16000,
+            numberOfChannels: 1}
+
+
+        // console.log(decoderConfig);
+        console.assert(AudioDecoder.isConfigSupported(decoderConfig));
+        chunk = new EncodedAudioChunk(init);
+        audioDecoder.configure(decoderConfig);
+        audioDecoder.decode(chunk);
+    }
+        // decoded = oDecoder.decodeFrame(value.buffer);
+
+        // //Create an audio buffer, which will contain the audio data.
+        // // let audioBuffer = audioContext.decodeAudioData(value.buffer, {length: bufferDurationS * audioContext.sampleRate, numberOfChannels: channelCount, sampleRate: audioContext.sampleRate})
+        // let audioBuffer = audioContext.createBuffer(channelCount, bufferDurationS * audioContext.sampleRate, audioContext.sampleRate);
+
+        // //Get the audio channels, which are float arrays representing each individual channel for the buffer.
+        // let channels = [];
+        // for (let channelIndex = 0; channelIndex < channelCount; ++channelIndex) {
+        //     channels.push(audioBuffer.getChannelData(channelIndex));
+        // }
+
+        // //Populate the audio buffer with audio data.
+        // for (let sampleIndex = 0; sampleIndex < audioBuffer.length; ++sampleIndex) {
+        //     channels[0][sampleIndex] = Math.sin(sampleIndex * 0.01);
+        //     // channels[1][sampleIndex] = channels[0][sampleIndex];
+        // }
+
+        // //Creates a lightweight audio buffer source which can be used to play the audio data.
+        // let audioBufferSource = audioContext.createBufferSource();
+        // audioBufferSource.buffer = audioBuffer;
+        // audioBufferSource.connect(audioContext.destination);
+        // audioBufferSource.start();
+
+        // console.log(value);
+        // let a = [];
+        // for (let i = 0; i < value.byteLength; i++) {
+        //     a.push(value.getUint8(i));
+        // }
+        // console.log('> ' + a.join(', '));
+    // }
+
+////////////////
 </script>
+
