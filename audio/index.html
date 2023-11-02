@@ -3,14 +3,47 @@
 
 <head>
   <title>Web BLE Audio Test</title>
+  <style>
+    .container {
+      width: 960px;
+      height: 384px;
+      margin-top: 30px;
+      margin-bottom: 7.5px;
+      margin: 0 auto;
+    }
+    .widget {
+      background-color: #111111;
+      border: 1px solid #000000;
+      border-radius: 0px;
+      padding: 12px;
+      margin: 6px;
+      float: left;
+      color: #DAE3E3;
+      padding-bottom: 16px;
+    }
+    .doublegraph {
+      width: 423px;
+      height: 177px;
+    }
+  </style>
+  
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+
 </head>
 
 <body>
     <form>
-        <button id="startNotifications">Start notifications</button>
-        <button id="stopNotifications">Stop notifications</button>
-      </form>
+        <button id="startNotifications">Pair and start listening to EVB Blue's audio stream</button>
+        <button id="stopNotifications">Stop listening</button>
+    </form>
+    <audio controls></audio>
+    <div class="container">
+      <div class="double widget">
+        <div class="label">Audio Waveform</div>
+        <div id="Audio Waveform" class="doublegraph"></div>
+      </div>
+    </div>
 </body>
 
 <script>
@@ -33,33 +66,42 @@
     });
   </script>
 
-<!-- <script src="opus-decoder.min.js"></script> -->
-
 <script>
-    // import { OpusDecoder } from './node_modules/opus-decoder/dist/opus-decoder.min.js';
-    // import { OpusDecoder } from 'node_modules/opus-decoder';
-    const serviceUuid =        '19690000-0000-1234-abcd-5678aabb1011';
-    const characteristicUuid = '19690000-5001-1234-abcd-5678aabb1011';
-    let audioContext;
-    let audioDecoder = new AudioDecoder({output: playAudio, error: onAudioError});
-    // await audioDecoder.configure({
-    //     codec: "opus",
-    //     sampleRate: 16000,
-    //     numberOfChannels: 1
-    // });
-
-    // const { OpusDecoder } = window["opus-decoder"];
-
-    // const oDecoder = new OpusDecoder();
-    // const oDecoder = new window["opus-decoder"].OpusDecoder({sampleRate: 16000, channels: 1});
-    // await oDecoder.ready;
-
+    // BLE
     let myCharacteristic;
     let myValue = 0;
     let myBLE;
+    const serviceUuid =        '19690000-0000-1234-abcd-5678aabb1011';
+    const characteristicUuid = '19690000-5001-1234-abcd-5678aabb1011';
+
+    // Audio Decode
+    // let audioContext;
+    const audioDecoder = new AudioDecoder({output: decodeToQueue2, error: onAudioError});
+    audioDecoder.configure({
+            codec: "opus",
+            sampleRate: 48000,
+            numberOfChannels: 1});
+    audioDecoder.flush();
+
+    // Set up MediaStreamGenerator (plays decoded audio)
+    const generator = new MediaStreamTrackGenerator({ kind: 'audio' });
+    const { writable } = generator;
+    const audioWriter = writable.getWriter();
+    const mediaStream = new MediaStream([generator]);
+    generator.onmute = generator.onunmute = (e) => console.log(e.type);
+    const audio = document.querySelector('audio'); // Connect to <audio> element
+    audio.srcObject = mediaStream;
+    let decoderController = void 0;
+    const decoderStream = new ReadableStream({
+        start(c) {
+        return (decoderController = c);
+        },
+    });
+    const decoderReader = decoderStream.getReader();
 
     function onStartButtonClick() {
         console.log('Requesting Bluetooth Device...');
+        initWaveform();
         navigator.bluetooth.requestDevice({
             filters: [{
                 services: [serviceUuid]
@@ -80,8 +122,6 @@
         .then(characteristic => {
             myCharacteristic = characteristic;
             return myCharacteristic.startNotifications().then(_ => {
-                audioContext = new AudioContext({sampleRate: 16000});
-                // oDecoder = new OpusDecoder({sampleRate: 16000, channels: 1});
                 console.log('> Notifications started');
                 myCharacteristic.addEventListener('characteristicvaluechanged',
                     handleNotifications);
@@ -106,80 +146,76 @@
         }
     }
 
-    function playAudio (audioData) { // AudioData object
-        const audioBuffer = audioContext.createBuffer(1, 960, 16000);
-        const buffer = audioBuffer.getChannelData(0); // Get the array
-        const source = audioContext.createBufferSource(); // AudioBuffer source node
-        audioData.copyTo(buffer, {planeIndex: 0}); // copy AudioData to AudioBuffer Channel
-        // for (let i = 0; i < 80; i++) {
-        //     buffer[i] = audioData.getFloat32(i);
-        // }
-
-        source.buffer = audioBuffer;
-        source.connect(audioContext.destination);
-        source.start();
+    function decodeToQueue (audioData) { // AudioData object
+        decodedFrameQueue.push(audioData);
     }
 
+    async function decodeToQueue2 (audioData) { // AudioData object
+        ab = new Float32Array(960);
+        audioData.copyTo(ab, {planeIndex: 0});
+        pcmData = ab; // for animation
+        decoderController.enqueue(audioData.duration);
+        await audioWriter.write(audioData);
+        requestAnimationFrame(updateWaveform);
+    }
     function onAudioError(error) {
         console.log(error);
     }
 
+    let chunkNum = 0; // Keeps track of chunk timestamp, starts from time '0'
     function handleNotifications(event) {
-        let value = event.target.value; // This is a DataView, I think
-        // const channelCount = 1;
-        // const bufferDurationS = .02;
-
+        // let value = event.target.value; // This is a DataView
         //  Decode the audio data from the Opus frame
         const init = {
             type: "key",
-            data: value,
-            timestamp: 0,
+            data: event.target.value, // This is a DataView
+            timestamp: chunkNum*20000,
             duration: 20000,
         };
-        const decoderConfig = {
-            codec: "opus",
-            sampleRate: 16000,
-            numberOfChannels: 1}
-
-
-        // console.log(decoderConfig);
-        console.assert(AudioDecoder.isConfigSupported(decoderConfig));
+        chunkNum++;
         chunk = new EncodedAudioChunk(init);
-        audioDecoder.configure(decoderConfig);
         audioDecoder.decode(chunk);
     }
-        // decoded = oDecoder.decodeFrame(value.buffer);
 
-        // //Create an audio buffer, which will contain the audio data.
-        // // let audioBuffer = audioContext.decodeAudioData(value.buffer, {length: bufferDurationS * audioContext.sampleRate, numberOfChannels: channelCount, sampleRate: audioContext.sampleRate})
-        // let audioBuffer = audioContext.createBuffer(channelCount, bufferDurationS * audioContext.sampleRate, audioContext.sampleRate);
+    // Visualization
+    pcmData = []; // for visualization
 
-        // //Get the audio channels, which are float arrays representing each individual channel for the buffer.
-        // let channels = [];
-        // for (let channelIndex = 0; channelIndex < channelCount; ++channelIndex) {
-        //     channels.push(audioBuffer.getChannelData(channelIndex));
-        // }
+    function updateWaveform() {
+        Plotly.restyle('Audio Waveform', { y: pcmData });
+    }
 
-        // //Populate the audio buffer with audio data.
-        // for (let sampleIndex = 0; sampleIndex < audioBuffer.length; ++sampleIndex) {
-        //     channels[0][sampleIndex] = Math.sin(sampleIndex * 0.01);
-        //     // channels[1][sampleIndex] = channels[0][sampleIndex];
-        // }
+    function initWaveform() {
+            var title = 'Audio Waveform';
 
-        // //Creates a lightweight audio buffer source which can be used to play the audio data.
-        // let audioBufferSource = audioContext.createBufferSource();
-        // audioBufferSource.buffer = audioBuffer;
-        // audioBufferSource.connect(audioContext.destination);
-        // audioBufferSource.start();
+            Plotly.plot(title, 
+            [{
+                y: [],
+                name: "foo",
+                mode: 'lines',
+                width: 1,
+                line: { width: 1, color:  "#FF355E"}
+            }], 
+            {
+                plot_bgcolor: '#111111',
+                paper_bgcolor: '#111111',
+                margin: { l: 8, r: 8, b: 18, t: 18 },
+                showlegend: false,
+                yaxis: {
+                'showticklabels': false,
+                'autorange': true,
+                // 'range': [-32000, 32000]
+            },
+            xaxis: {
+                    'range': [0, 960],
+                    'showticklabels': false,
+                    'autorange': false,
+                    'showgrid': true,
+                    'zeroline': true,
+                    tickfont: { size: 8 }
+                }
+            });
+        }
 
-        // console.log(value);
-        // let a = [];
-        // for (let i = 0; i < value.byteLength; i++) {
-        //     a.push(value.getUint8(i));
-        // }
-        // console.log('> ' + a.join(', '));
-    // }
-
-////////////////
 </script>
+
 

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Web BLE Audio Test</title>
+  <style>
+    .container {
+      width: 960px;
+      height: 384px;
+      margin-top: 30px;
+      margin-bottom: 7.5px;
+      margin: 0 auto;
+    }
+    .widget {
+      background-color: #111111;
+      border: 1px solid #000000;
+      border-radius: 0px;
+      padding: 12px;
+      margin: 6px;
+      float: left;
+      color: #DAE3E3;
+      padding-bottom: 16px;
+    }
+    .doublegraph {
+      width: 423px;
+      height: 177px;
+    }
+  </style>
+  
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+
+</head>
+
+<body>
+    <form>
+        <button id="startNotifications">Start notifications</button>
+        <button id="stopNotifications">Stop notifications</button>
+    </form>
+    <audio controls></audio>
+    <div class="container">
+      <div class="double widget">
+        <div class="label">Audio Waveform</div>
+        <div id="Audio Waveform" class="doublegraph"></div>
+      </div>
+    </div>
+</body>
+
+<script>
+    document.querySelector('#startNotifications').addEventListener('click', function(event) {
+      event.stopPropagation();
+      event.preventDefault();
+  
+    //   if (isWebBluetoothEnabled()) {
+        // ChromeSamples.clearLog();
+        onStartButtonClick();
+    //   }
+    });
+    document.querySelector('#stopNotifications').addEventListener('click', function(event) {
+      event.stopPropagation();
+      event.preventDefault();
+  
+    //   if (isWebBluetoothEnabled()) {
+        onStopButtonClick();
+    //   }
+    });
+  </script>
+
+<script>
+    // BLE
+    let myCharacteristic;
+    let myValue = 0;
+    let myBLE;
+    const serviceUuid =        '19690000-0000-1234-abcd-5678aabb1011';
+    const characteristicUuid = '19690000-5001-1234-abcd-5678aabb1011';
+
+    // Audio Decode
+    let audioContext;
+    const audioDecoder = new AudioDecoder({output: decodeToQueue2, error: onAudioError});
+    audioDecoder.configure({
+            codec: "opus",
+            sampleRate: 48000,
+            numberOfChannels: 1});
+    audioDecoder.flush();
+
+    // MediaStream
+    const generator = new MediaStreamTrackGenerator({ kind: 'audio' });
+    // console.log(
+    //   generator.getSettings().channelCount,
+    //   await generator.getConstraints(),
+    //   generator.getCapabilities()
+    // );
+    const { writable } = generator;
+    const audioWriter = writable.getWriter();
+    const mediaStream = new MediaStream([generator]);
+    generator.onmute = generator.onunmute = (e) => console.log(e.type);
+    const audio = document.querySelector('audio');
+    audio.srcObject = mediaStream;
+    let decoderController = void 0;
+    const decoderStream = new ReadableStream({
+        start(c) {
+        return (decoderController = c);
+        },
+    });
+    const decoderReader = decoderStream.getReader();
+
+    function onStartButtonClick() {
+        function initWaveform() {
+            var title = 'Audio Waveform';
+
+            Plotly.plot(title, 
+            [{
+                y: [],
+                name: "foo",
+                mode: 'lines',
+                width: 1,
+                line: { width: 1, color:  "#FF355E"}
+            }], 
+            {
+                plot_bgcolor: '#111111',
+                paper_bgcolor: '#111111',
+                margin: { l: 8, r: 8, b: 18, t: 18 },
+                showlegend: false,
+                yaxis: {
+                'showticklabels': false,
+                'autorange': true,
+                // 'range': [-32000, 32000]
+            },
+            xaxis: {
+                    'range': [0, 960],
+                    'showticklabels': false,
+                    'autorange': false,
+                    'showgrid': true,
+                    'zeroline': true,
+                    tickfont: { size: 8 }
+                }
+            });
+        }
+
+        console.log('Requesting Bluetooth Device...');
+        initWaveform();
+        navigator.bluetooth.requestDevice({
+            filters: [{
+                services: [serviceUuid]
+            }]
+        })
+        .then(device => {
+            console.log('Connecting to GATT Server...');
+            return device.gatt.connect();
+        })
+        .then(server => {
+            console.log('Getting Service...');
+            return server.getPrimaryService(serviceUuid);
+        })
+        .then(service => {
+            console.log('Getting Characteristic...');
+            return service.getCharacteristic(characteristicUuid);
+        })
+        .then(characteristic => {
+            myCharacteristic = characteristic;
+            return myCharacteristic.startNotifications().then(_ => {
+                // audioContext = new AudioContext({sampleRate: 16000, latencyHint: 'interactive' });
+                // playAudio();
+                // let masterOutput = new MasterOutput();
+                // masterOutput.startPlaying();
+                console.log('> Notifications started');
+                myCharacteristic.addEventListener('characteristicvaluechanged',
+                    handleNotifications);
+            });
+        })
+        .catch(error => {
+            console.log('Argh! ' + error);
+        });
+    }
+
+    function onStopButtonClick() {
+        if (myCharacteristic) {
+            myCharacteristic.stopNotifications()
+                .then(_ => {
+                    console.log('> Notifications stopped');
+                    myCharacteristic.removeEventListener('characteristicvaluechanged',
+                        handleNotifications);
+                })
+                .catch(error => {
+                    console.log('Argh! ' + error);
+                });
+        }
+    }
+
+
+
+
+    class MasterOutput {
+    constructor() {
+    //   this.computeSamplesCallback = computeSamplesCallback.bind(this);
+      this.onComputeTimeoutBound = this.onComputeTimeout.bind(this);
+  
+    //   this.audioContext = new AudioContext({sampleRate: 16000, latencyHint: 'interactive' });
+      this.audioContext = new AudioContext({latencyHint: 'interactive'});
+      this.sampleRate = this.audioContext.sampleRate;
+      this.channelCount = 1;
+  
+      this.totalBufferDuration = 1;
+      this.computeDuration = 0.03;
+      this.bufferDelayDuration = 0.1;
+  
+      this.totalSamplesCount = this.totalBufferDuration * this.sampleRate;
+      this.computeDurationMS = this.computeDuration * 1000.0;
+      this.computeSamplesCount = this.computeDuration * this.sampleRate;
+      this.buffersToKeep = Math.ceil((this.totalBufferDuration + 2.0 * this.bufferDelayDuration) /
+        this.computeDuration);
+  
+      this.audioBufferSources = [];
+      this.computeSamplesTimeout = null;
+    }
+  
+    startPlaying() {
+      if (this.audioBufferSources.length > 0) {
+        this.stopPlaying();
+      }
+  
+      //Start computing indefinitely, from the beginning.
+      let audioContextTimestamp = this.audioContext.getOutputTimestamp();
+      this.audioContextStartOffset = audioContextTimestamp.contextTime;
+      this.lastTimeoutTime = audioContextTimestamp.performanceTime;
+      for (this.currentBufferTime = 0.0; this.currentBufferTime < this.totalBufferDuration;
+        this.currentBufferTime += this.computeDuration) {
+        this.bufferNext();
+      }
+      this.onComputeTimeoutBound();
+    }
+  
+    onComputeTimeout() {
+      this.bufferNext();
+      this.currentBufferTime += this.computeDuration;
+  
+      //Readjust the next timeout to have a consistent interval, regardless of computation time.
+      let nextTimeoutDuration = 2.0 * this.computeDurationMS - (performance.now() - this.lastTimeoutTime) - 1;
+      this.lastTimeoutTime = performance.now();
+      this.computeSamplesTimeout = setTimeout(this.onComputeTimeoutBound, nextTimeoutDuration);
+    }
+  
+    bufferNext() {
+      this.currentSamplesOffset = this.currentBufferTime * this.sampleRate;
+  
+      //Create an audio buffer, which will contain the audio data.
+      this.audioBuffer = this.audioContext.createBuffer(this.channelCount, this.computeSamplesCount,
+        this.sampleRate);
+  
+      //Get the audio channels, which are float arrays representing each individual channel for the buffer.
+    //   this.channels = [];
+    //   for (let channelIndex = 0; channelIndex < this.channelCount; ++channelIndex) {
+    //     this.channels.push(this.audioBuffer.getChannelData(channelIndex));
+    //   }
+  
+      //Compute the samples.
+      decodeToBuffer(this.audioBuffer);
+  
+      //Creates a lightweight audio buffer source which can be used to play the audio data. Note: This can only be
+      //started once...
+      let audioBufferSource = this.audioContext.createBufferSource();
+      //Set the audio buffer.
+      audioBufferSource.buffer = this.audioBuffer;
+      //Connect it to the output.
+      audioBufferSource.connect(this.audioContext.destination);
+      //Start playing when the audio buffer is due.
+      audioBufferSource.start(this.audioContextStartOffset + this.currentBufferTime + this.bufferDelayDuration);
+      while (this.audioBufferSources.length >= this.buffersToKeep) {
+        this.audioBufferSources.shift();
+      }
+      this.audioBufferSources.push(audioBufferSource);
+    }
+  
+    stopPlaying() {
+      if (this.audioBufferSources.length > 0) {
+        for (let audioBufferSource of this.audioBufferSources) {
+          audioBufferSource.stop();
+        }
+        this.audioBufferSources = [];
+        clearInterval(this.computeSamplesTimeout);
+        this.computeSamplesTimeout = null;
+      }
+    }
+  }
+
+
+    decodedFrameQueue = [];
+
+    function decodeToBuffer(audioBuffer) {
+        // Pop from decoded queue to audioBuffer
+        if (decodedFrameQueue.length > 0) {
+            audioData = decodedFrameQueue.shift();
+            audioData.copyTo(audioBuffer.getChannelData(0), {planeIndex: 0});
+            pcmData = audioBuffer.getChannelData(0);
+        } else {
+            console.log("No audio data to decode");
+        }
+        requestAnimationFrame(updateWaveform);
+
+    }
+
+    pcmData = []; // for visualization
+
+    function updateWaveform() {
+        Plotly.restyle('Audio Waveform', { y: pcmData });
+    }
+
+    function playAudio() { // AudioData object
+        if (audioQueue.length > 5) {
+            ab = audioQueue.shift();
+            // pcmData = ab; // for animation
+            const source = audioContext.createBufferSource(); // AudioBuffer source node
+            source.buffer = ab;
+            // source.loop = true;
+            source.connect(audioContext.destination);
+            source.start(0, 0, 0.02*5);
+        }
+        requestAnimationFrame(updateWaveform);
+    }
+
+    function decodeToQueue (audioData) { // AudioData object
+        decodedFrameQueue.push(audioData);
+    }
+
+    async function decodeToQueue2 (audioData) { // AudioData object
+        // ab = new ArrayBuffer(960);
+        // audioData.copyTo(ab, {planeIndex: 0});
+        // pcmData = ab; // for animation
+        decoderController.enqueue(audioData.duration);
+        await audioWriter.write(audioData);
+        requestAnimationFrame(updateWaveform);
+    }
+    function onAudioError(error) {
+        console.log(error);
+    }
+
+    let chunkNum = 0;
+    function handleNotifications(event) {
+        let value = event.target.value; // This is a DataView
+        //  Decode the audio data from the Opus frame
+        const init = {
+            type: "key",
+            data: value,
+            timestamp: chunkNum*20000,
+            // timestamp: 0,
+            duration: 20000,
+        };
+        chunkNum++;
+
+        // console.log(decoderConfig);
+        // console.assert(AudioDecoder.isConfigSupported(decoderConfig));
+        chunk = new EncodedAudioChunk(init);
+        audioDecoder.decode(chunk);
+    }
+
+</script>
+
+<script>
+// async function main() {
+//     const ac = new AudioContext({
+//       sampleRate: 22050,
+//       latencyHint: 0,
+//     });
+//     const generator = new MediaStreamTrackGenerator({ kind: 'audio' });
+//     console.log(
+//       generator.getSettings().channelCount,
+//       await generator.getConstraints(),
+//       generator.getCapabilities()
+//     );
+//     const { writable } = generator;
+//     const audioWriter = writable.getWriter();
+//     const mediaStream = new MediaStream([generator]);
+//     generator.onmute = generator.onunmute = (e) => console.log(e.type);
+//     const audio = document.querySelector('audio');
+//     audio.srcObject = mediaStream;
+//     let decoderController = void 0;
+//     const decoderStream = new ReadableStream({
+//       start(c) {
+//         return (decoderController = c);
+//       },
+//     });
+//     const decoderReader = decoderStream.getReader();
+//     let encoded_counter = 0;
+//     const decoder = new AudioDecoder({
+//       error(e) {
+//         console.error(e);
+//       },
+//       async output(frame) {
+//         decoderController.enqueue(frame.duration);
+//         await audioWriter.write(frame);
+//         ++encoded_counter;
+//       },
+//     });
+//     await audioWriter.ready;
+//     const encoded = await (await fetch('./encoded.json')).json();
+//     let [base_time] = encoded[encoded.length - 1];
+//     const metadata = encoded.shift();
+//     metadata.decoderConfig.description = new Uint8Array(
+//       base64ToBytesArr(metadata.decoderConfig.description)
+//     ).buffer;
+//     console.log(await AudioEncoder.isConfigSupported(metadata.decoderConfig));
+//     decoder.configure(metadata.decoderConfig);
+//     encoded_audio_chunk_length = encoded.length;
+//     while (encoded.length) {
+//       const chunk = encoded.shift();
+//       let [/* type, */ timestamp, /* byteLength, */ duration, data] = chunk;
+//       data = new Uint8Array(base64ToBytesArr(data)).buffer;
+//       const eac = new EncodedAudioChunk({
+//         type: 'key',
+//         timestamp,
+//         duration,
+//         data,
+//       });
+//       decoder.decode(eac);
+//       const { value, done } = await decoderReader.read();
+//       // Avoid overflowing MediaStreamTrackGenerator
+//       // https://bugs.chromium.org/p/chromium/issues/detail?id=1184070
+//       // https://bugs.chromium.org/p/chromium/issues/detail?id=1199377
+//       await new Promise((resolve) =>
+//         setTimeout(resolve, ((value || 0) / 10 ** 6) * 900)
+//       );
+//     }
+//     // Avoid clipping end of playback
+//     await new Promise((resolve) =>
+//       setTimeout(resolve, (base_time / 10 ** 6 - audio.currentTime) * 1000)
+//     );
+//     console.log(base_time, audio.currentTime, encoded_counter);
+//     generator.stop();
+//     await decoder.flush();
+//     decoderController.close();
+//   }
+  </script>
+
+
+
