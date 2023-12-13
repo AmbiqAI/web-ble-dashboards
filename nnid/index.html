@@ -2,7 +2,7 @@
 <html>
 
 <head>
-  <title>Web BLE Audio Test</title>
+  <title>NNID Dashboard</title>
   <link href='https://fonts.googleapis.com/css?family=Roboto Mono' rel='stylesheet'>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
@@ -160,7 +160,7 @@
                 <div id="Audio Waveform" class="doublegraph"></div>
             </div>
             <div class="double widget">
-                <div class="label">Spectrogram</div>
+                <div class="label">Spectrogram & VAD</div>
                 <canvas id="Spectrogram" class="doublegraph"></canvas>
             </div>
             <div class="status widget">
@@ -183,11 +183,12 @@
     let myBLE;
     let chunkNum = 0; // Keeps track of chunk timestamp, starts from time '0'
 
-    const serviceUuid =        '19690000-0000-1234-abcd-5678aabb1011';
-    const characteristicUuid = '19690000-5001-1234-abcd-5678aabb1011';
-    const seLatencycharacteristicUuid = '19690000-5002-1234-abcd-5678aabb1011';
-    const opusLatencycharacteristicUuid = '19690000-5003-1234-abcd-5678aabb1011';
-    const seEnabledcharacteristicUuid = '19690000-5004-1234-abcd-5678aabb1011';
+    const serviceUuid =        '19690001-0000-1234-abcd-5678aabb1011';
+    const characteristicUuid = '19690001-5001-1234-abcd-5678aabb1011';
+    // const seLatencycharacteristicUuid = '19690000-5002-1234-abcd-5678aabb1011';
+    // const opusLatencycharacteristicUuid = '19690000-5003-1234-abcd-5678aabb1011';
+    const vadCharacteristicUuid = '19690001-5004-1234-abcd-5678aabb1011';
+    const messageCharacteristicUuid = '19690001-5005-1234-abcd-5678aabb1011';
 
     // UI
     const BLEstatus = document.getElementById('bluetooth');
@@ -217,7 +218,7 @@
     });
     const decoderReader = decoderStream.getReader();
 
-    snack('Works with AmbiqSuite Audio Demos running on Apollo EVBs', 1)
+    snack('Neural Network Speaker ID Demo - please ensure NNID firmware is flashed before starting', 1)
 
     if ("bluetooth" in navigator) {
         pairButton.addEventListener('click', function (event) {
@@ -243,29 +244,33 @@
             ]
         });
 
-        msg('connecting to device ...');
+        msg('connecting to BLE device ...');
         device.addEventListener('gattserverdisconnected', onDisconnected);
         const server = await device.gatt.connect();
 
-        msg('getting primary service ...');
+        msg('getting primary BLE service ...');
         const service = await server.getPrimaryService(serviceUuid);
 
-        msg('getting Audio Stream Characteristic  ...');
+        msg('getting BLE characteristics  ...');
         const audioCharacteristic = await service.getCharacteristic(characteristicUuid);
         audioCharacteristic.addEventListener('characteristicvaluechanged', handleNotifications);
         await audioCharacteristic.startNotifications();
     
-        const seLatencyCharacteristic = await service.getCharacteristic(seLatencycharacteristicUuid);
-        seLatencyCharacteristic.addEventListener('characteristicvaluechanged', handleSeLatencyNotifications);
-        await seLatencyCharacteristic.startNotifications();
+        // const seLatencyCharacteristic = await service.getCharacteristic(seLatencycharacteristicUuid);
+        // seLatencyCharacteristic.addEventListener('characteristicvaluechanged', handleSeLatencyNotifications);
+        // await seLatencyCharacteristic.startNotifications();
 
         // const opusLatencyCharacteristic = await service.getCharacteristic(opusLatencycharacteristicUuid);
         // opusLatencyCharacteristic.addEventListener('characteristicvaluechanged', handleOpusLatencyNotifications);
         // await opusLatencyCharacteristic.startNotifications();
         
-        const seEnabledCharacteristic = await service.getCharacteristic(seEnabledcharacteristicUuid);
-        seEnabledCharacteristic.addEventListener('characteristicvaluechanged', handleSeEnabledNotifications);
-        await seEnabledCharacteristic.startNotifications();
+        const vadCharacteristic = await service.getCharacteristic(vadCharacteristicUuid);
+        vadCharacteristic.addEventListener('characteristicvaluechanged', handleVadNotifications);
+        await vadCharacteristic.startNotifications();
+
+        const messageCharacteristic = await service.getCharacteristic(messageCharacteristicUuid);
+        messageCharacteristic.addEventListener('characteristicvaluechanged', handleMessageNotifications);
+        await messageCharacteristic.startNotifications();
 
         let spectrogram = new Spectrogram('Spectrogram');
         spectrogram.gotStream(mediaStream);
@@ -275,8 +280,8 @@
         pairButton.style.backgroundColor = 'green';
         pairButton.style.color = 'white';
         pairButton.innerHTML = "PAIRED";
-        msg('Listening, speech enhancement is disabled.');
-        snack('Connected. Press play to hear audio, Button 0 to toggle speech enhancement.', 0);
+        msg('Listening, ready to enroll speakers.');
+        snack('Connected. Press Button 1 on EVB to start enrollment', 0);
     }
 
 
@@ -327,18 +332,34 @@
         Plotly.restyle('SeLatency', { y: [seLatencyData] });
     }
 
-    function handleSeEnabledNotifications(event) {
+    // function handleSeEnabledNotifications(event) {
+    //     let value = event.target.value; // This is a DataView
+
+    //     if (value.getUint8(0) == 1) {
+    //         msg('Speech enhancement is enabled.',0);
+    //     } else {
+    //         msg('Speech enhancement is disabled.',0);
+    //     }
+    //     // msg('SE Enabled: ' + value.getUint8(0), 0);
+    // }
+
+    function handleMessageNotifications(event) {
         let value = event.target.value; // This is a DataView
+        
+        // convert to string
+        var decoder = new TextDecoder('utf-8');
+        var message = decoder.decode(value);
+        msg(message)
+        // console.log('msg: '+ message)
+    }    
 
-        if (value.getUint8(0) == 1) {
-            msg('Speech enhancement is enabled.',0);
-        } else {
-            msg('Speech enhancement is disabled.',0);
-        }
-        // msg('SE Enabled: ' + value.getUint8(0), 0);
+    vad = 0;
+
+    function handleVadNotifications(event) {
+        let value = event.target.value; // This is a DataView
+        vad = value.getUint8(0);
+        console.log('vad: '+ vad)
     }
-
-
     // Visualization
     pcmData = []; // for visualization
     seLatencyData = []; // for visualization
@@ -367,7 +388,7 @@
             yaxis: {
             'showticklabels': false,
             'autorange': false,
-            'range': [-.75, .75]
+            'range': [-.15, .15]
         },
         xaxis: {
                 'range': [0, 960],
@@ -471,9 +492,17 @@ function Spectrogram(id) {
 
     self.drawColumn = function() {
         var value = 0;
-        for (var y = 0; y < self.height; y++) {
+        for (var y = 0; y < self.height-50; y++) {
             var x = col;
             self.setPixel(x, y, value, value, value, 255)
+        }
+        for (var y = self.height-50; y < self.height; y++) {
+            var x = col;
+            if (vad == 1) {
+                self.setPixel(x, y, 255, 255, 255, 255)
+            } else {
+                self.setPixel(x, y, 255, 0, 0, 255)
+            }
         }
     }
 
@@ -536,8 +565,15 @@ function Spectrogram(id) {
     }
 
     self.addColumn = function(colorizeData) {
-        for (var y = 0; y < self.height; y++) {
+        for (var y = 0; y < self.height-5; y++) {
             self.setPixel(self.x, y, colorizeData[4 * y + 0], colorizeData[4 * y + 1], colorizeData[4 * y + 2], colorizeData[4 * y + 3]);
+        }
+        for (var y = self.height-5; y < self.height; y++) {
+            if (vad == 1) {
+                self.setPixel(self.x, y, 255, 255, 255, 255)
+            } else {
+                self.setPixel(self.x, y, 0, 0, 0, 255)
+            }
         }
         self.x++;
         self.x %= self.width;
