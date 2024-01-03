@@ -44,6 +44,46 @@
       cursor: pointer;
     }
 
+    #enrollButton {
+      background-color: #d8f41d;
+      border: none;
+      color: black;
+      padding: 1px;
+      text-align: center;
+      text-decoration: none;
+
+      margin: 8px 18px;
+      height: 25px;
+      width: 200px;
+      border-radius: 10%;
+      outline: none;
+
+      border-radius: 20px;
+      grid-column: 1;
+
+      cursor: pointer;
+    }
+
+    #idButton {
+      background-color: #d8f41d;
+      border: none;
+      color: black;
+      padding: 1px;
+      text-align: center;
+      text-decoration: none;
+
+      margin: 8px 18px;
+      height: 25px;
+      width: 200px;
+      border-radius: 10%;
+      outline: none;
+
+      border-radius: 20px;
+      grid-column: 1;
+
+      cursor: pointer;
+    }
+
     .widget {
       background-color: #111111;
       border: 1px solid #000000;
@@ -68,6 +108,14 @@
       height: "512";
       width: "700";
     }
+    .prompt {
+      margin-top: 1%;
+      width: 885px;
+      height: 70px;
+      color: white;
+      display: grid;
+      grid-template-columns: 15% 70%;
+    }
     .status {
       margin-top: 1%;
       width: 885px;
@@ -76,10 +124,38 @@
       display: grid;
       grid-template-columns: 15% 70% 15%;
     }
+    
+    .control {
+      margin-top: 1%;
+      width: 885px;
+      height: 84px;
+      color: white;
+      display: grid;
+      grid-template-columns: 15% 70% 15%;
+    }
 
     #bluetooth {
       font-size: 16px;
       height: 50%;
+      margin: auto;
+    }
+
+    #enrolled {
+      font-size: 16px;
+      height: 50%;
+      margin: auto;
+    }
+
+    #identified {
+      font-size: 16px;
+      height: 50%;
+      margin: auto;
+    }
+
+    #promptlabel {
+      font-size: 16px;
+      height: 50%;
+      color: blue;
       margin: auto;
     }
 
@@ -145,13 +221,27 @@
   </style>
 </head>
 
+
+
 <body>
     <div class="container">
 
         <div id="snackbar"></div>
-            <div class="status widget">
+        <div class="status widget">
             <button id="pairButton">CONNECT</button>
             <div class="label statusBar" id="bluetooth">Click the connect button to connect your device</div>
+        </div>
+        <div class="status widget">
+            <button id="enrollButton">Enroll New Speaker</button>
+            <div class="label statusBar" id="enrolled">Speakers enrolled: 0</div>
+        </div>
+        <div class="prompt widget">
+            <div>Training Prompt:</div>
+            <div class="label statusBar" id="promptlabel">Press Enroll button to start training</div>
+        </div>
+        <div class = "status widget">
+            <button id="idButton">Identify Speaker</button>
+            <div class="label statusBar" id="identified">Must Enroll at least 1 speaker</div>
         </div>
 
         <div class="container">
@@ -167,10 +257,10 @@
                 <!-- <div class="label"></div>Once BLE is connected, press Play</div> -->
                 <audio controls class="audioBar"></audio>
             </div>
-            <div class="double widget">
+            <!-- <div class="double widget">
                 <div class="label">Speech Enhancement AI Inference Latency (ms)</div>
                 <div id="SeLatency" class="doublegraph"></canvas>
-            </div>
+            </div> -->
         </div>
     </div>
 </body>
@@ -189,10 +279,39 @@
     // const opusLatencycharacteristicUuid = '19690000-5003-1234-abcd-5678aabb1011';
     const vadCharacteristicUuid = '19690001-5004-1234-abcd-5678aabb1011';
     const messageCharacteristicUuid = '19690001-5005-1234-abcd-5678aabb1011';
+    const enrollButtonCharacteristicUuid = '19690001-5006-1234-abcd-5678aabb1011';
+    const idButtonCharacteristicUuid = '19690001-5007-1234-abcd-5678aabb1011';
+    const utterancesCharacteristicUuid = '19690001-5008-1234-abcd-5678aabb1011';
+
+    // Public domain 3 second phrases to prompt user to speak
+
+    const randomUtterances = [
+        "Machine learning is the study of programs that can improve their performance on a given task automatically.",
+        "The field of machine learning is concerned with the question of how to construct computer programs that automatically improve with experience.",
+        "The first sailboats were invented in Mesopotamia around 5000 years ago by the Sumerians.",
+        "Sailboats gave humans the ability to travel across open water, which greatly increased the scope of human influence.",
+        "AI is like sailboats in that they're both technologies that greatly increase the scope of human influence.",
+        "Deep learning is related to a class of algorithms called neural networks.",
+        "Neural networks are inspired by the brain, which is composed of cells called neurons.",
+        "Neurons are connected to each other in a network, and they communicate with each other using electrical signals.",
+        "There are many different approaches to machine learning, but deep learning is the most popular one right now."
+    ]
 
     // UI
     const BLEstatus = document.getElementById('bluetooth');
     const pairButton = document.getElementById('pairButton');
+    const enrollButton = document.getElementById('enrollButton');
+    const idButton = document.getElementById('idButton');
+    const enrolledLabel = document.getElementById('enrolled');
+    const identifiedLabel = document.getElementById('identified');
+    const promptLabel = document.getElementById('promptlabel');
+    let enrollButtonCharacteristic;
+    let idButtonCharacteristic;
+
+    // State machine
+    let state = 'disconnected'; // disconnected, connected, enrolling, readyToIdentify
+    let enrolled = 0;
+    let numUtterancesForCurrentSpeaker = 0;
 
     // Audio Decode
     const audioDecoder = new AudioDecoder({output: decodeToQueue2, error: onAudioError});
@@ -218,7 +337,8 @@
     });
     const decoderReader = decoderStream.getReader();
 
-    snack('Neural Network Speaker ID Demo - please ensure NNID firmware is flashed before starting', 1)
+    snack('Neural Network Speaker ID Demo - please ensure NNID firmware is flashed before pairing', 1)
+    updateButtons();
 
     if ("bluetooth" in navigator) {
         pairButton.addEventListener('click', function (event) {
@@ -229,6 +349,73 @@
         msg("browser not supported"); /*pairButton.style.backgroundColor = "red";*/
         snack("Error: This browser doesn't support Web Bluetooth. Try using Chrome.", 1);
     }
+
+    enrollButton.addEventListener('click', function (event) {
+        // collectUtterances();
+        if (state == 'connected') {
+            if (enrolled < 5) {
+                enrollButtonCharacteristic.writeValue(new Uint8Array([1]));
+                snack('Enrolling speaker ' + (enrolled+1) + ' of 5', 0);
+                // msg('Enrolling speaker ' + (enrolled+1) + ' of 5');
+                utterance = randomUtterances[Math.floor(Math.random() * randomUtterances.length)];
+                promptLabel.innerHTML = utterance;
+                // state = 'enrolling';
+                updateButtons();
+            } else {
+                snack('Max enrollments reached', 1);
+            }
+        } else {
+            snack('Please connect to device first', 1);
+        }
+    });
+
+    idButton.addEventListener('click', function (event) {
+        if (state == 'connected') {
+            if (enrolled > 0) {
+                idButtonCharacteristic.writeValue(new Uint8Array([1]));
+                snack('Identifying speaker', 0);
+
+                updateButtons();
+            } else {
+                snack('No speakers enrolled', 1);
+            }
+        } else {
+            snack('Please connect to device first', 1);
+        }
+    });
+
+
+    function updateButtons() {
+        if (state == 'disconnected') {
+            enrollButton.style.backgroundColor = "grey";
+            enrollButton.style.color = 'black';
+            idButton.style.backgroundColor = "grey";
+            idButton.style.color = 'black';
+            // pairButton.innerHTML = "CONNECT";
+        } else if (state == 'connected') {
+            if (enrolled < 5) {
+                enrollButton.style.backgroundColor = "green";
+                enrollButton.style.color = 'white';
+                // enrollButton.innerHTML = "ENROLL";
+            } else {
+                enrollButton.style.backgroundColor = "grey";
+                enrollButton.style.color = 'black';
+                enrollButton.innerHTML = "MAX ENROLLMENTS";
+            }
+
+            if (enrolled > 0) {
+                idButton.style.backgroundColor = "green";
+                idButton.style.color = 'white';
+                identifiedLabel.innerHTML = 'Ready to Identify Speakers';
+                // idButton.innerHTML = "IDENTIFY";
+            } else {
+                idButton.style.backgroundColor = "grey";
+                idButton.style.color = 'black';
+                // idButton.innerHTML = "NO ENROLLMENTS";
+            }
+        }
+    }
+
 
     async function bleConnect() {
         pairButton.style.backgroundColor = "grey";
@@ -272,16 +459,26 @@
         messageCharacteristic.addEventListener('characteristicvaluechanged', handleMessageNotifications);
         await messageCharacteristic.startNotifications();
 
+        const utterancesCharacteristic = await service.getCharacteristic(utterancesCharacteristicUuid);
+        utterancesCharacteristic.addEventListener('characteristicvaluechanged', handleUtterancesNotifications);
+        await utterancesCharacteristic.startNotifications();
+
+        enrollButtonCharacteristic = await service.getCharacteristic(enrollButtonCharacteristicUuid);
+        idButtonCharacteristic = await service.getCharacteristic(idButtonCharacteristicUuid);
+
+        state = 'connected';
+        updateButtons();
+
         let spectrogram = new Spectrogram('Spectrogram');
         spectrogram.gotStream(mediaStream);
         initWaveform();
-        initGraph('SeLatency', 'Speech Enhancement AI Inference Latency (ms)', [0, 10]);
+        // initGraph('SeLatency', 'Speaker ID AI Inference Latency (ms)', [0, 10]);
 
         pairButton.style.backgroundColor = 'green';
         pairButton.style.color = 'white';
         pairButton.innerHTML = "PAIRED";
         msg('Listening, ready to enroll speakers.');
-        snack('Connected. Press Button 1 on EVB to start enrollment', 0);
+        snack('Connected. Press Enroll to start enrollment', 0);
     }
 
 
@@ -289,10 +486,13 @@
         let device = event.target;
         pairButton.style.backgroundColor = "red";
         pairButton.innerHTML = "PAIR";
+        state = 'disconnected';
+        updateButtons();
         snack("Device disconnected, please retry", 1)
         snack('Device ' + device.name + ' has been disconnected.', 1);
         msg("Disconnected");
     }
+
 
     async function decodeToQueue2 (audioData) { // AudioData object
         ab = new Float32Array(960);
@@ -303,9 +503,11 @@
         requestAnimationFrame(updateWaveform);
     }
 
+
     function onAudioError(error) {
         console.log(error);
     }
+
 
     function handleNotifications(event) {
         // let value = event.target.value; // This is a DataView
@@ -349,7 +551,15 @@
         // convert to string
         var decoder = new TextDecoder('utf-8');
         var message = decoder.decode(value);
-        msg(message)
+
+        // if first word of message is "Speaker", then send to the identified label
+        if (message.split(' ')[0] == 'Speaker') {
+            identifiedLabel.innerHTML = message;
+            snack(message, 0);
+        } else {
+            snack(message, 0);
+        }
+        // snack(message)
         // console.log('msg: '+ message)
     }    
 
@@ -360,6 +570,26 @@
         vad = value.getUint8(0);
         console.log('vad: '+ vad)
     }
+
+    function handleUtterancesNotifications(event) {
+        let value = event.target.value; // This is a DataView
+        numUtterancesForCurrentSpeaker = value.getUint8(0);
+        console.log('utts: '+ numUtterancesForCurrentSpeaker)
+        if (numUtterancesForCurrentSpeaker == 4) {
+            snack('Speaker enrolled', 0);
+            msg('Speaker enrolled');
+            enrolled++;
+            enrolledLabel.innerHTML = 'Speakers enrolled: ' + enrolled;
+            // state = 'connected';
+            promptLabel.innerHTML = 'Press Enroll to start training new Speaker, or Identify to identify a speaker';
+            updateButtons();
+        } else {
+            utterance = randomUtterances[Math.floor(Math.random() * randomUtterances.length)];
+            promptLabel.innerHTML = utterance;
+            // msg("Please say: \"" + utterance + "\"");
+        }
+    }
+
     // Visualization
     pcmData = []; // for visualization
     seLatencyData = []; // for visualization
