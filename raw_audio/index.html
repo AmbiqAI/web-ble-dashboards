@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>NNID Dashboard</title>
+  <link href='https://fonts.googleapis.com/css?family=Roboto Mono' rel='stylesheet'>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <style>
+     * {
+      font-family: 'Roboto Mono', sans-serif;
+    }
+
+    body {
+      color: white;
+      background: #000000;
+      font-size: 14px;
+    }
+    .container {
+      width: 960px;
+      height: 384px;
+      margin-top: 30px;
+      margin-bottom: 7.5px;
+      margin: 0 auto;
+    }
+
+    #pairButton {
+      background-color: #d8f41d;
+      border: none;
+      color: black;
+      padding: 1px;
+      text-align: center;
+      text-decoration: none;
+
+      margin: 8px 18px;
+      height: 25px;
+      width: 100px;
+      border-radius: 10%;
+      outline: none;
+
+      border-radius: 20px;
+      grid-column: 1;
+
+      cursor: pointer;
+    }
+
+    #enrollButton {
+      background-color: #d8f41d;
+      border: none;
+      color: black;
+      padding: 1px;
+      text-align: center;
+      text-decoration: none;
+
+      margin: 8px 18px;
+      height: 25px;
+      width: 200px;
+      border-radius: 10%;
+      outline: none;
+
+      border-radius: 20px;
+      grid-column: 1;
+
+      cursor: pointer;
+    }
+
+    #idButton {
+      background-color: #d8f41d;
+      border: none;
+      color: black;
+      padding: 1px;
+      text-align: center;
+      text-decoration: none;
+
+      margin: 8px 18px;
+      height: 25px;
+      width: 200px;
+      border-radius: 10%;
+      outline: none;
+
+      border-radius: 20px;
+      grid-column: 1;
+
+      cursor: pointer;
+    }
+
+    .widget {
+      background-color: #111111;
+      border: 1px solid #000000;
+      border-radius: 0px;
+      padding: 12px;
+      margin: 6px;
+      float: left;
+      color: #DAE3E3;
+      padding-bottom: 16px;
+    }
+    .doublegraph {
+      width: 400px;
+      height: 220px;
+      vertical-align: bottom;
+    }
+    .double {
+      width: 423px;
+      height: 226px;
+      vertical-align: bottom;
+    }
+    .spectrograph {
+      height: "512";
+      width: "700";
+    }
+    .prompt {
+      margin-top: 1%;
+      width: 885px;
+      height: 70px;
+      color: white;
+      display: grid;
+      grid-template-columns: 15% 70%;
+    }
+    .status {
+      margin-top: 1%;
+      width: 885px;
+      height: 42px;
+      color: white;
+      display: grid;
+      grid-template-columns: 15% 70% 15%;
+    }
+    
+    .control {
+      margin-top: 1%;
+      width: 885px;
+      height: 84px;
+      color: white;
+      display: grid;
+      grid-template-columns: 15% 70% 15%;
+    }
+
+    #bluetooth {
+      font-size: 16px;
+      height: 50%;
+      margin: auto;
+    }
+
+    #enrolled {
+      font-size: 16px;
+      height: 50%;
+      margin: auto;
+    }
+
+    #identified {
+      font-size: 16px;
+      height: 50%;
+      margin: auto;
+    }
+
+    #promptlabel {
+      font-size: 16px;
+      height: 50%;
+      color: blue;
+      margin: auto;
+    }
+
+    .statusBar {
+      height: 100%;
+      grid-column: 2;
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    .audioBar {
+      height: 100%;
+      grid-column: 1;
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    #snackbar {
+      height: 23px;
+      display: block;
+      visibility: visible;
+      text-align: center;
+      background-color: #374146;
+      border-radius: 3px;
+      padding: 4px 13px 4px 13px;
+      margin: 16px 7px 7px;
+      display: inline-block;
+    }
+
+    #snackbar.show {
+      -webkit-animation: fadein 0.5s, 0.1s;
+      animation: fadein 0.5s, 0.1s;
+    }
+
+
+    @-webkit-keyframes fadein {
+      from {
+        visibility: hidden;
+        opacity: 0;
+      }
+      to {
+        visibility: visible;
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadein {
+      from {
+        visibility: hidden;
+        opacity: 0;
+      }
+      to {
+        visibility: visible;
+        opacity: 1;
+      }
+    }
+    .label {
+      height: 15px;
+      display: inline;
+      font-size: 12px;
+
+    }
+  </style>
+</head>
+
+
+
+<body>
+    <div class="container">
+
+        <div id="snackbar"></div>
+        <div class="status widget">
+            <button id="pairButton">CONNECT</button>
+            <div class="label statusBar" id="bluetooth">Click the connect button to connect your device</div>
+        </div>
+        <div class="status widget">
+            <button id="enrollButton">Enroll New Speaker</button>
+            <div class="label statusBar" id="enrolled">Speakers enrolled: 0</div>
+        </div>
+        <div class="prompt widget">
+            <div>Training Prompt:</div>
+            <div class="label statusBar" id="promptlabel">Press Enroll button to start training</div>
+        </div>
+        <div class = "status widget">
+            <button id="idButton">Identify Speaker</button>
+            <div class="label statusBar" id="identified">Must Enroll at least 1 speaker</div>
+        </div>
+
+        <div class="container">
+            <div class="double widget">
+                <div class="label">Audio Waveform</div>
+                <div id="Audio Waveform" class="doublegraph"></div>
+            </div>
+            <div class="double widget">
+                <div class="label">Spectrogram & VAD</div>
+                <canvas id="Spectrogram" class="doublegraph"></canvas>
+            </div>
+            <div class="status widget">
+                <!-- <div class="label"></div>Once BLE is connected, press Play</div> -->
+                <audio controls class="audioBar"></audio>
+            </div>
+            <!-- <div class="double widget">
+                <div class="label">Speech Enhancement AI Inference Latency (ms)</div>
+                <div id="SeLatency" class="doublegraph"></canvas>
+            </div> -->
+        </div>
+    </div>
+</body>
+
+
+<script>
+    // BLE
+    let myCharacteristic;
+    let myValue = 0;
+    let myBLE;
+    let chunkNum = 0; // Keeps track of chunk timestamp, starts from time '0'
+
+    const serviceUuid =        '19690001-0000-1234-abcd-5678aabb1011';
+    const characteristicUuid = '19690001-5001-1234-abcd-5678aabb1011';
+    // const seLatencycharacteristicUuid = '19690000-5002-1234-abcd-5678aabb1011';
+    // const opusLatencycharacteristicUuid = '19690000-5003-1234-abcd-5678aabb1011';
+    const vadCharacteristicUuid = '19690001-5004-1234-abcd-5678aabb1011';
+    const messageCharacteristicUuid = '19690001-5005-1234-abcd-5678aabb1011';
+    const enrollButtonCharacteristicUuid = '19690001-5006-1234-abcd-5678aabb1011';
+    const idButtonCharacteristicUuid = '19690001-5007-1234-abcd-5678aabb1011';
+    const utterancesCharacteristicUuid = '19690001-5008-1234-abcd-5678aabb1011';
+
+    // Public domain 3 second phrases to prompt user to speak
+
+    const randomUtterances = [
+        "Machine learning is the study of programs that can improve their performance on a given task automatically.",
+        "The field of machine learning is concerned with the question of how to construct computer programs that automatically improve with experience.",
+        "The first sailboats were invented in Mesopotamia around 5000 years ago by the Sumerians.",
+        "Sailboats gave humans the ability to travel across open water, which greatly increased the scope of human influence.",
+        "AI is like sailboats in that they're both technologies that greatly increase the scope of human influence.",
+        "Deep learning is related to a class of algorithms called neural networks.",
+        "Neural networks are inspired by the brain, which is composed of cells called neurons.",
+        "Neurons are connected to each other in a network, and they communicate with each other using electrical signals.",
+        "There are many different approaches to machine learning, but deep learning is the most popular one right now."
+    ]
+
+    // UI
+    const BLEstatus = document.getElementById('bluetooth');
+    const pairButton = document.getElementById('pairButton');
+    const enrollButton = document.getElementById('enrollButton');
+    const idButton = document.getElementById('idButton');
+    const enrolledLabel = document.getElementById('enrolled');
+    const identifiedLabel = document.getElementById('identified');
+    const promptLabel = document.getElementById('promptlabel');
+    let enrollButtonCharacteristic;
+    let idButtonCharacteristic;
+
+    // State machine
+    let state = 'disconnected'; // disconnected, connected, enrolling, readyToIdentify
+    let enrolled = 0;
+    let numUtterancesForCurrentSpeaker = 0;
+
+    // Audio Decode
+    const audioDecoder = new AudioDecoder({output: decodeToQueue2, error: onAudioError});
+    audioDecoder.configure({
+            codec: "pcm-s16",
+            sampleRate: 16000,
+            numberOfChannels: 1});
+    // audioDecoder.configure({
+    //         codec: "opus",
+    //         sampleRate: 48000,
+    //         numberOfChannels: 1});
+    audioDecoder.flush();
+
+    // Set up MediaStreamGenerator (plays decoded audio)
+    const generator = new MediaStreamTrackGenerator({ kind: 'audio' });
+    const { writable } = generator;
+    const audioWriter = writable.getWriter();
+    const mediaStream = new MediaStream([generator]);
+    generator.onmute = generator.onunmute = (e) => console.log(e.type);
+    const audio = document.querySelector('audio'); // Connect to <audio> element
+    audio.srcObject = mediaStream;
+    let decoderController = void 0;
+    const decoderStream = new ReadableStream({
+        start(c) {
+        return (decoderController = c);
+        },
+    });
+    const decoderReader = decoderStream.getReader();
+
+    snack('Neural Network Speaker ID Demo - please ensure NNID firmware is flashed before pairing', 1)
+    updateButtons();
+
+    if ("bluetooth" in navigator) {
+        pairButton.addEventListener('click', function (event) {
+            bleConnect();
+        });
+    // else the browser doesn't support bluetooth
+    } else {
+        msg("browser not supported"); /*pairButton.style.backgroundColor = "red";*/
+        snack("Error: This browser doesn't support Web Bluetooth. Try using Chrome.", 1);
+    }
+
+    enrollButton.addEventListener('click', function (event) {
+        // collectUtterances();
+        if (state == 'connected') {
+            if (enrolled < 5) {
+                enrollButtonCharacteristic.writeValue(new Uint8Array([1]));
+                snack('Enrolling speaker ' + (enrolled+1) + ' of 5', 0);
+                // msg('Enrolling speaker ' + (enrolled+1) + ' of 5');
+                utterance = randomUtterances[Math.floor(Math.random() * randomUtterances.length)];
+                promptLabel.innerHTML = utterance;
+                // state = 'enrolling';
+                updateButtons();
+            } else {
+                snack('Max enrollments reached', 1);
+            }
+        } else {
+            snack('Please connect to device first', 1);
+        }
+    });
+
+    idButton.addEventListener('click', function (event) {
+        if (state == 'connected') {
+            if (enrolled > 0) {
+                idButtonCharacteristic.writeValue(new Uint8Array([1]));
+                snack('Identifying speaker', 0);
+
+                updateButtons();
+            } else {
+                snack('No speakers enrolled', 1);
+            }
+        } else {
+            snack('Please connect to device first', 1);
+        }
+    });
+
+
+    function updateButtons() {
+        if (state == 'disconnected') {
+            enrollButton.style.backgroundColor = "grey";
+            enrollButton.style.color = 'black';
+            idButton.style.backgroundColor = "grey";
+            idButton.style.color = 'black';
+            // pairButton.innerHTML = "CONNECT";
+        } else if (state == 'connected') {
+            if (enrolled < 5) {
+                enrollButton.style.backgroundColor = "green";
+                enrollButton.style.color = 'white';
+                // enrollButton.innerHTML = "ENROLL";
+            } else {
+                enrollButton.style.backgroundColor = "grey";
+                enrollButton.style.color = 'black';
+                enrollButton.innerHTML = "MAX ENROLLMENTS";
+            }
+
+            if (enrolled > 0) {
+                idButton.style.backgroundColor = "green";
+                idButton.style.color = 'white';
+                identifiedLabel.innerHTML = 'Ready to Identify Speakers';
+                // idButton.innerHTML = "IDENTIFY";
+            } else {
+                idButton.style.backgroundColor = "grey";
+                idButton.style.color = 'black';
+                // idButton.innerHTML = "NO ENROLLMENTS";
+            }
+        }
+    }
+
+
+    async function bleConnect() {
+        pairButton.style.backgroundColor = "grey";
+        pairButton.style.color = 'black';
+        pairButton.innerHTML = "PAIRING";
+        msg('requesting device ...');
+
+        const device = await navigator.bluetooth.requestDevice({
+            filters: [
+                {
+                services: [serviceUuid] // SERVICE_UUID
+                }
+            ]
+        });
+
+        msg('connecting to BLE device ...');
+        device.addEventListener('gattserverdisconnected', onDisconnected);
+        const server = await device.gatt.connect();
+
+        msg('getting primary BLE service ...');
+        const service = await server.getPrimaryService(serviceUuid);
+
+        msg('getting BLE characteristics  ...');
+        const audioCharacteristic = await service.getCharacteristic(characteristicUuid);
+        audioCharacteristic.addEventListener('characteristicvaluechanged', handleNotifications);
+        await audioCharacteristic.startNotifications();
+    
+        // const seLatencyCharacteristic = await service.getCharacteristic(seLatencycharacteristicUuid);
+        // seLatencyCharacteristic.addEventListener('characteristicvaluechanged', handleSeLatencyNotifications);
+        // await seLatencyCharacteristic.startNotifications();
+
+        // const opusLatencyCharacteristic = await service.getCharacteristic(opusLatencycharacteristicUuid);
+        // opusLatencyCharacteristic.addEventListener('characteristicvaluechanged', handleOpusLatencyNotifications);
+        // await opusLatencyCharacteristic.startNotifications();
+        
+        const vadCharacteristic = await service.getCharacteristic(vadCharacteristicUuid);
+        vadCharacteristic.addEventListener('characteristicvaluechanged', handleVadNotifications);
+        await vadCharacteristic.startNotifications();
+
+        const messageCharacteristic = await service.getCharacteristic(messageCharacteristicUuid);
+        messageCharacteristic.addEventListener('characteristicvaluechanged', handleMessageNotifications);
+        await messageCharacteristic.startNotifications();
+
+        const utterancesCharacteristic = await service.getCharacteristic(utterancesCharacteristicUuid);
+        utterancesCharacteristic.addEventListener('characteristicvaluechanged', handleUtterancesNotifications);
+        await utterancesCharacteristic.startNotifications();
+
+        enrollButtonCharacteristic = await service.getCharacteristic(enrollButtonCharacteristicUuid);
+        idButtonCharacteristic = await service.getCharacteristic(idButtonCharacteristicUuid);
+
+        state = 'connected';
+        updateButtons();
+
+        let spectrogram = new Spectrogram('Spectrogram');
+        spectrogram.gotStream(mediaStream);
+        initWaveform();
+        // initGraph('SeLatency', 'Speaker ID AI Inference Latency (ms)', [0, 10]);
+
+        pairButton.style.backgroundColor = 'green';
+        pairButton.style.color = 'white';
+        pairButton.innerHTML = "PAIRED";
+        msg('Listening, ready to enroll speakers.');
+        snack('Connected. Press Enroll to start enrollment', 0);
+    }
+
+
+    function onDisconnected(event) {
+        let device = event.target;
+        pairButton.style.backgroundColor = "red";
+        pairButton.innerHTML = "PAIR";
+        state = 'disconnected';
+        updateButtons();
+        snack("Device disconnected, please retry", 1)
+        snack('Device ' + device.name + ' has been disconnected.', 1);
+        msg("Disconnected");
+    }
+
+
+    async function decodeToQueue2 (audioData) { // AudioData object
+        ab = new Float32Array(960);
+        audioData.copyTo(ab, {planeIndex: 0});
+        pcmData = ab; // for animation
+        decoderController.enqueue(audioData.duration);
+        await audioWriter.write(audioData);
+        requestAnimationFrame(updateWaveform);
+    }
+
+
+    function onAudioError(error) {
+        console.log(error);
+    }
+
+
+    function handleNotifications(event) {
+        // let value = event.target.value; // This is a DataView
+        //  Decode the audio data from the Opus frame
+
+        // event.target.value is a DataView containing 320ms of pcm data
+        // Add it to the audioDecoder stream
+        let audioData = new AudioData(event.target.value, {numberOfChannels: 1, sampleRate: 16000});
+        console.log("foo");
+        // play audioData
+
+
+        ab = new Float32Array(960);
+        event.target.value.copyTo(ab, {planeIndex: 0});
+        pcmData = ab; // for animation
+        decoderController.enqueue(audioData.duration);
+         audioWriter.write(audioData);
+        requestAnimationFrame(updateWaveform);
+
+
+        // const init = {
+        //     type: "key",
+        //     data: event.target.value, // This is a DataView
+        //     timestamp: chunkNum*20000,
+        //     duration: 20000,
+        // };
+        // chunkNum++;
+        // chunk = new EncodedAudioChunk(init);
+        // audioDecoder.decode(chunk);
+    }
+
+    function handleSeLatencyNotifications(event) {
+        let value = event.target.value; // This is a DataView
+        let latency = value.getUint32(0, true)/1000;
+        seLatencyData.push(latency);
+        if (seLatencyData.length > 20) { seLatencyData.shift(); }
+
+        // snack('Speech enhancement latency: ' + value.getUint32(0, true)/1000 + 'ms', 0);
+        // console.log(seLatencyData);
+        Plotly.restyle('SeLatency', { y: [seLatencyData] });
+    }
+
+    // function handleSeEnabledNotifications(event) {
+    //     let value = event.target.value; // This is a DataView
+
+    //     if (value.getUint8(0) == 1) {
+    //         msg('Speech enhancement is enabled.',0);
+    //     } else {
+    //         msg('Speech enhancement is disabled.',0);
+    //     }
+    //     // msg('SE Enabled: ' + value.getUint8(0), 0);
+    // }
+
+    function handleMessageNotifications(event) {
+        let value = event.target.value; // This is a DataView
+        
+        // convert to string
+        var decoder = new TextDecoder('utf-8');
+        var message = decoder.decode(value);
+
+        // if first word of message is "Speaker", then send to the identified label
+        if (message.split(' ')[0] == 'Speaker') {
+            identifiedLabel.innerHTML = message;
+            snack(message, 0);
+        } else {
+            snack(message, 0);
+        }
+        // snack(message)
+        // console.log('msg: '+ message)
+    }    
+
+    vad = 0;
+
+    function handleVadNotifications(event) {
+        let value = event.target.value; // This is a DataView
+        vad = value.getUint8(0);
+        console.log('vad: '+ vad)
+    }
+
+    function handleUtterancesNotifications(event) {
+        let value = event.target.value; // This is a DataView
+        numUtterancesForCurrentSpeaker = value.getUint8(0);
+        console.log('utts: '+ numUtterancesForCurrentSpeaker)
+        if (numUtterancesForCurrentSpeaker == 4) {
+            snack('Speaker enrolled', 0);
+            msg('Speaker enrolled');
+            enrolled++;
+            enrolledLabel.innerHTML = 'Speakers enrolled: ' + enrolled;
+            // state = 'connected';
+            promptLabel.innerHTML = 'Press Enroll to start training new Speaker, or Identify to identify a speaker';
+            updateButtons();
+        } else {
+            utterance = randomUtterances[Math.floor(Math.random() * randomUtterances.length)];
+            promptLabel.innerHTML = utterance;
+            // msg("Please say: \"" + utterance + "\"");
+        }
+    }
+
+    // Visualization
+    pcmData = []; // for visualization
+    seLatencyData = []; // for visualization
+    opusLatencyData = []; // for visualization
+
+    function updateWaveform() {
+        Plotly.restyle('Audio Waveform', { y: pcmData });
+    }
+
+    function initWaveform() {
+        var title = 'Audio Waveform';
+
+        Plotly.plot(title, 
+        [{  
+            y: [],
+            name: "Amplitude",
+            mode: 'lines',
+            width: 1,
+            line: { width: 1, color:  "#FF355E"}
+        }], 
+        {
+            plot_bgcolor: '#111111',
+            paper_bgcolor: '#111111',
+            margin: { l: 8, r: 8, b: 18, t: 18 },
+            showlegend: false,
+            yaxis: {
+            'showticklabels': false,
+            'autorange': false,
+            'range': [-.15, .15]
+        },
+        xaxis: {
+                'range': [0, 960],
+                'showticklabels': false,
+                'autorange': false,
+                'showgrid': true,
+                'zeroline': true,
+                tickfont: { size: 8 }
+            }
+        });
+    }
+
+    function initGraph(id, title, yaxis) {
+        Plotly.plot(id, 
+        [{
+            x: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19],
+            y: [],
+            name: title,
+            mode: 'lines',
+            width: 1,
+            line: { width: 1, color:  "#FF355E"}
+        }], 
+        {
+            plot_bgcolor: '#111111',
+            paper_bgcolor: '#111111',
+            margin: { l: 8, r: 8, b: 18, t: 18 },
+            showlegend: false,
+            yaxis: {
+            'showticklabels': false,
+            'autorange': false,
+            'range': yaxis
+        },
+        xaxis: {
+                'range': [0, 20],
+                'showticklabels': false,
+                'autorange': false,
+                'showgrid': true,
+                'zeroline': true,
+                tickfont: { size: 8 }
+            }
+        });
+    }
+
+
+
+// Modified to only show bottom 8khz, since the original data is sampled at 16khz
+// Since the encoder is fixed at 48k (so, 24k msx freq), we have to just chop off the top 16k
+function Spectrogram(id) {
+    var self = this;
+
+    self.canvas = document.getElementById(id);
+    self.width  = self.canvas.width;
+    self.height = self.canvas.height;
+    self.ctx = self.canvas.getContext('2d');
+    self.imageData = self.ctx.getImageData(0, 0, self.width, self.height);
+
+    self.data = self.imageData.data;
+
+    self.buf = new ArrayBuffer(self.imageData.data.length);
+    self.buf8 = new Uint8ClampedArray(self.buf);
+    self.data32 = new Uint32Array(self.buf);
+
+    self.x = 0;
+    self.bufferSize = 512;
+    self.dataBuffer = new Float32Array(self.height);
+    self.uint8array = new Uint8Array(4);
+    self.colorData = new Uint8Array(4 * self.bufferSize);
+
+    self.gotStream = function(stream) {
+        self.context = new AudioContext();
+        self.sampleRate = self.context.sampleRate;
+
+        var input = self.context.createMediaStreamSource(stream);
+        self.analyser = self.context.createAnalyser();
+        self.analyser.fftSize = self.bufferSize*2;
+        input.connect(self.analyser);
+        self.animate();
+    }
+
+    self.setPixel = function(x, y, red, green, blue, alpha) {
+        self.data32[y * self.width + x] =
+            (alpha << 24) |    // alpha
+            (blue << 16) |      // blue
+            (green <<  8) |     // green
+            red;                // red
+    }
+
+    self.getPixel = function(x, y) {
+        var value = self.data32[y * self.width + x];
+        var channels = self.uint32Touint8(value)
+        return channels;
+    }
+
+    self.uint32Touint8 = function(uint32) {
+        self.uint8array[3] = uint32 >> 24 & 0xff;
+        self.uint8array[2] = uint32 >> 16 & 0xff;
+        self.uint8array[1] = uint32 >> 8 & 0xff;
+        self.uint8array[0] = uint32 & 0xff;
+        return data
+    }
+
+    self.drawColumn = function() {
+        var value = 0;
+        for (var y = 0; y < self.height-50; y++) {
+            var x = col;
+            self.setPixel(x, y, value, value, value, 255)
+        }
+        for (var y = self.height-50; y < self.height; y++) {
+            var x = col;
+            if (vad == 1) {
+                self.setPixel(x, y, 255, 255, 255, 255)
+            } else {
+                self.setPixel(x, y, 255, 0, 0, 255)
+            }
+        }
+    }
+
+    self.getData = function() {
+        var freqByteData = new Uint8Array(self.analyser.frequencyBinCount);
+        self.analyser.getByteFrequencyData(freqByteData);
+
+        // Reverse the direction, making lower frequencies on the bottom.
+        // BUT we only want to render bottom.
+        var startFrom = Math.floor(self.analyser.frequencyBinCount/3);
+        // for (var i = self.analyser.frequencyBinCount - 1; i >= 0; i--) {
+        for (var i = startFrom - 1; i >= 0; i--) {
+            // map whatever freqData number of buckets are present to whatever height we have
+            // var pixel = Math.floor((freqByteData.length - i) * self.height / freqByteData.length); // copilot guessed wrong
+            var pixel = Math.floor(3*(i) * self.height / freqByteData.length); // fixed
+            self.dataBuffer[pixel] = freqByteData[(startFrom - 1) - i] / 255.0;
+        }
+        return self.dataBuffer
+    }
+
+    self.color = function(value) {
+        var rgb = {R: 0, G: 0, B: 0};
+
+        if (0 <= value && value <= 1 / 8) {
+            rgb.R = 0;
+            rgb.G = 0;
+            rgb.B = 4 * value + .5; // .5 - 1 // b = 1/2
+        } else if (1 / 8 < value && value <= 3 / 8) {
+            rgb.R = 0;
+            rgb.G = 4 * value - .5; // 0 - 1 // b = - 1/2
+            rgb.B = 0;
+        } else if (3 / 8 < value && value <= 5 / 8) {
+            rgb.R = 4*value - 1.5; // 0 - 1 // b = - 3/2
+            rgb.G = 1;
+            rgb.B = -4 * value + 2.5; // 1 - 0 // b = 5/2
+        } else if (5 / 8 < value && value <= 7 / 8) {
+            rgb.R = 1;
+            rgb.G = -4 * value + 3.5; // 1 - 0 // b = 7/2
+            rgb.B = 0;
+        } else if (7 / 8 < value && value <= 1) {
+            rgb.R = -4*value + 4.5; // 1 - .5 // b = 9/2
+            rgb.G = 0;
+            rgb.B = 0;
+        } else {    // should never happen - value > 1
+            rgb.R = .5;
+            rgb.G = 0;
+            rgb.B = 0;
+        }
+
+        return [rgb.R, rgb.G, rgb.B, 1].map(function(d) { return parseInt(d * 255, 10)})
+    }
+
+    self.colorizeData = function(data) {
+        var d;
+        for(var i = 0, n = data.length; i < n; i++) {
+            d = self.color(data[i]);
+            self.colorData.set(d, i * 4);
+        }
+        return self.colorData;
+    }
+
+    self.addColumn = function(colorizeData) {
+        for (var y = 0; y < self.height-5; y++) {
+            self.setPixel(self.x, y, colorizeData[4 * y + 0], colorizeData[4 * y + 1], colorizeData[4 * y + 2], colorizeData[4 * y + 3]);
+        }
+        for (var y = self.height-5; y < self.height; y++) {
+            if (vad == 1) {
+                self.setPixel(self.x, y, 255, 255, 255, 255)
+            } else {
+                self.setPixel(self.x, y, 0, 0, 0, 255)
+            }
+        }
+        self.x++;
+        self.x %= self.width;
+    }
+
+    self.drawFrame = function(data) {
+        var data = data || self.getData();
+        var colorData = self.colorizeData(data)
+
+        self.addColumn(colorData);
+        self.imageData.data.set(self.buf8);
+        self.ctx.putImageData(self.imageData, 0, 0);
+    }
+
+    self.animate = function() {
+        self.drawFrame();
+        requestAnimationFrame(self.animate);
+    }
+}
+
+  // Top middle information label
+  function msg(m) {
+    BLEstatus.innerHTML = m;
+  }
+
+  //Top left pop up messaage
+  function snack(m, warningLevel) {
+    snackBar = document.getElementById("snackbar");
+    snackBar.style.visibility = "visible";
+    snackBar.className = "show";
+
+    var warnEmoji = warningLevel ? '☝️  ' : '✅  ';
+
+    setTimeout(function () { snackBar.className = snackBar.className.replace("show", ""); }, 501);
+    snackBar.innerHTML = m + ' <span onClick=hideSnack() style="cursor:pointer; margin-left: 15px"> X </span> ';
+  }
+
+  function hideSnack() {
+    snackBar = document.getElementById("snackbar");
+    snackBar.style.visibility = "hidden";
+  }
+
+</script>
+
+
