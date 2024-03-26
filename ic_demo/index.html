@@ -321,12 +321,18 @@
         fps = Math.round(fps * 100) / 100;
 
         if (type == 0) {
-            joulesEstimate = 2.18;
-            // jitter it a bit
-            joulesEstimate += Math.random() * 0.1 - 0.05;
-            // round to 2 decimals
-            joulesEstimate = Math.round(joulesEstimate * 100) / 100;
+            joulesEstimate = 218;
+        } else {
+            joulesEstimate = 76;
         }
+
+        // jitter it a bit
+        // joulesEstimate += Math.random() * 0.1 - 0.05;
+        joulesEstimate += Math.random()*5 - 0.25;
+        // Round to no decimals
+        joulesEstimate = Math.round(joulesEstimate);
+        // round to 2 decimals
+        // joulesEstimate = Math.round(joulesEstimate * 10) / 10;
 
         // Display label
         let label = kCategoryLabels[classId];
