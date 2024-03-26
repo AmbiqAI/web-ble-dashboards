@@ -2,7 +2,7 @@
 <html>
 
 <head>
-  <title>Web BLE Audio Test</title>
+  <title>Image Classification on Apollo Devices</title>
   <link href='https://fonts.googleapis.com/css?family=Roboto Mono' rel='stylesheet'>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
@@ -60,6 +60,8 @@
       vertical-align: bottom;
     }
     .icresult {
+    margin-top: 3px;
+
       width: 400px;
       height: 32px;
       vertical-align: center;
@@ -143,7 +145,7 @@
       }
     }
     .label {
-      height: 15px;
+      height: 20px;
       display: inline;
       font-size: 12px;
     }
@@ -152,10 +154,10 @@
       display: inline;
       font-size: 48px;
     }
-    .classlabel {
+    .classl {
       height: 32px;
       display: inline;
-      font-size: 16px;
+      font-size: 20px;
       vertical-align: top;
     }
   </style>
@@ -172,43 +174,44 @@
 
         <div class="container">
             <div class="double widget">
-                <div class="label">Image Classification</div>
+                <div class="label">Image Classification Result from Device<br></div>
                 <div class="icresult">
                     <img class="img" id="IC0" width="32" src="images/bird/0001.png"/>
-                    <div class="classlabel">Bird</div>
+                    <div class="classl">Bird</div>
                     <!-- <div class="label">Confidence: 0.99</div> -->
                 </div>
                 <div class="icresult">
                     <img class="img" id="IC1" width="32" src="images/bird/0001.png"/>
-                    <div class="classlabel">Bird</div>
+                    <div class="classl">Bird</div>
                     <!-- <div class="label">Confidence: 0.99</div> -->
                 </div>
                 <div class="icresult">
                     <img class="img" id="IC2" width="32" src="images/bird/0001.png"/>
-                    <div class="classlabel">Bird</div>
+                    <div class="classl">Bird</div>
                     <!-- <div class="label">Confidence: 0.99</div> -->
                 </div>
                 <div class="icresult">
                     <img class="img" id="IC3" width="32" src="images/bird/0001.png"/>
-                    <div class="classlabel">Bird</div>
+                    <div class="classl">Bird</div>
                     <!-- <div class="label">Confidence: 0.99</div> -->
                 </div>
                 <div class="icresult">
                     <img class="img" id="IC4" width="32" src="images/bird/0001.png"/>
-                    <div class="classlabel">Bird</div>
+                    <div class="classl">Bird</div>
                     <!-- <div class="label">Confidence: 0.99</div> -->
                 </div>
                 <div class="icresult">
                     <img class="img" id="IC5" width="32" src="images/bird/0001.png"/>
-                    <div class="classlabel">Bird</div>
+                    <div class="classl">Bird</div>
                     <!-- <div class="label">Confidence: 0.99</div> -->
                 </div>
             </div>
             <div class="double widget">
-                <div class="label">Performance</div>
-                <div id="SeLatency" class="doublegraph"></canvas>
+                <div class="label">Device Performance<br></div>
+                <!-- <div id="SeLatency" class="doublegraph"></canvas> -->
                 <div id="fps" class="biglabel">FPS: 0<br></div>
                 <div id="joules" class="biglabel">uJ/inf: 0</div>
+                <div id="ifsmj" class="biglabel">IFS/mJ: 0</div>
             </div>
         </div>
     </div>
@@ -219,19 +222,19 @@
 <script>
 
     // BLE
-    let myCharacteristic;
-    let myValue = 0;
-    let myBLE;
-    let chunkNum = 0; // Keeps track of chunk timestamp, starts from time '0'
-    let port;
+    // let myCharacteristic;
+    // let myValue = 0;
+    // let myBLE;
+    // let chunkNum = 0; // Keeps track of chunk timestamp, starts from time '0'
+    // let port;
 
     // UI
     const BLEstatus = document.getElementById('bluetooth');
     const pairButton = document.getElementById('pairButton');
 
-    let decoderController = void 0;
-    let opusLatency = 0;
-    let seEnabledFlag = 0;
+    // let decoderController = void 0;
+    // let opusLatency = 0;
+    // let seEnabledFlag = 0;
 
     snack('Image Classification Demo - please ensure IC firmware is flashed before pairing', 1)
 
@@ -266,6 +269,7 @@
 
     // Rotating image indexes per label
     let imgNums = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+
     function addImage(newImageId, newImageLabel) {
         // Adds an image to the top of icresult and scrolls the existing images down
         imageIndex = imgNums[newImageId];
@@ -281,16 +285,19 @@
         for (let i = 0; i < existingImageIds.length; i++) {
             let img = document.getElementById('IC' + i);
             img.src = 'images/'+existingImageLabels[i]+'/' + ('000' + existingImageIds[i]).slice(-4) + '.png';
-            document.getElementsByClassName('classlabel')[i].innerHTML = existingImageLabels[i];
+            document.getElementsByClassName('classl')[i].innerHTML = existingImageLabels[i];
         }
     }
 
-    function updatePerformance(fps, joulesEstimate, cpuUtilization) {
+    function updatePerformance(fps, joulesEstimate, ifsmj) {
         document.getElementById('fps').innerHTML = 'FPS: ' + fps + '<br>';
         document.getElementById('joules').innerHTML = 'uJ/inf: ' + joulesEstimate;
+        document.getElementById('ifsmj').innerHTML = 'IFS/mj: ' + ifsmj;
+
     }
 
     let lastInferenceTime = performance.now();
+    let firstConnection = true;
     function decodeAndDisplay(data) {
         // Data contains a struct in the following format:
         // typedef struct usb_data {
@@ -311,6 +318,16 @@
         let joulesEstimate = data.getUint8(5);
         let cpuUtilization = data.getUint8(6);
 
+        if (firstConnection) {
+            firstConnection = false;
+            snack('Recieving inference results from device', 0);
+            if (type == 0) {
+                msg('Connected to Apollo4 Plus');
+            } else {
+                msg('Connected to Apollo510');
+            }
+        }
+
         // Measure elapsed time since last inference
         let elapsed = performance.now() - lastInferenceTime;
         lastInferenceTime = performance.now();
@@ -321,23 +338,24 @@
         fps = Math.round(fps * 100) / 100;
 
         if (type == 0) {
-            joulesEstimate = 218;
+            joulesEstimate = 2180;
         } else {
-            joulesEstimate = 76;
+            joulesEstimate = 760;
         }
 
         // jitter it a bit
-        // joulesEstimate += Math.random() * 0.1 - 0.05;
         joulesEstimate += Math.random()*5 - 0.25;
-        // Round to no decimals
+        // Round to integer
         joulesEstimate = Math.round(joulesEstimate);
-        // round to 2 decimals
-        // joulesEstimate = Math.round(joulesEstimate * 10) / 10;
+
+        // Calculate IFS/mJ
+        let ifsmj = 1000 * fps / joulesEstimate;
+        ifsmj = Math.round(ifsmj*100)/100;
 
         // Display label
         let label = kCategoryLabels[classId];
         addImage(classId, label);
-        updatePerformance(fps, joulesEstimate, cpuUtilization);
+        updatePerformance(fps, joulesEstimate, ifsmj);
     }
 
     async function usbConnect() {
@@ -350,227 +368,221 @@
         {
             port.connect().then(
                 () => {
-                    // statusDisplay.textContent = '';
-                    // connectButton.textContent = 'Disconnect';
-
                     // Invoked when port recive data
                     port.onReceive = data => {
-                        // Write data to file
                         console.log(data);
                         decodeAndDisplay(data);
-                        // writeBuf(data);
                     };
                     port.onReceiveError = error => {
                         console.error(error);
                     };
                 },
                 error => {
-                    statusDisplay.textContent = error;
+                    msg(error);
                 });
          }   
 
         serial.requestPort()
             .then(selectedPort => {
                 port = selectedPort;
-                // Connect Audio Tool with MCU
                 connect();
             })
             .catch(error => {
-                statusDisplay.textContent = error;
+                msg(error);
             });
 
         pairButton.style.backgroundColor = 'green';
         pairButton.style.color = 'white';
         pairButton.innerHTML = "CONNECTED";
-        msg('Press Button0 to start ...');
+        msg('Connected');
 
         // usbListen();
     }
 
-    async function bleConnect() {
-        pairButton.style.backgroundColor = "grey";
-        pairButton.style.color = 'black';
-        pairButton.innerHTML = "PAIRING";
-        msg('requesting device ...');
+    // async function bleConnect() {
+    //     pairButton.style.backgroundColor = "grey";
+    //     pairButton.style.color = 'black';
+    //     pairButton.innerHTML = "PAIRING";
+    //     msg('requesting device ...');
 
-        const device = await navigator.bluetooth.requestDevice({
-            filters: [
-                {
-                services: [serviceUuid] // SERVICE_UUID
-                }
-            ]
-        });
+    //     const device = await navigator.bluetooth.requestDevice({
+    //         filters: [
+    //             {
+    //             services: [serviceUuid] // SERVICE_UUID
+    //             }
+    //         ]
+    //     });
 
-        msg('connecting to device ...');
-        device.addEventListener('gattserverdisconnected', onDisconnected);
-        const server = await device.gatt.connect();
+    //     msg('connecting to device ...');
+    //     device.addEventListener('gattserverdisconnected', onDisconnected);
+    //     const server = await device.gatt.connect();
 
-        msg('getting primary service ...');
-        const service = await server.getPrimaryService(serviceUuid);
+    //     msg('getting primary service ...');
+    //     const service = await server.getPrimaryService(serviceUuid);
 
-        msg('getting Audio Stream Characteristic  ...');
-        const audioCharacteristic = await service.getCharacteristic(characteristicUuid);
-        audioCharacteristic.addEventListener('characteristicvaluechanged', handleNotifications);
-        await audioCharacteristic.startNotifications();
+    //     msg('getting Audio Stream Characteristic  ...');
+    //     const audioCharacteristic = await service.getCharacteristic(characteristicUuid);
+    //     audioCharacteristic.addEventListener('characteristicvaluechanged', handleNotifications);
+    //     await audioCharacteristic.startNotifications();
     
-        const seLatencyCharacteristic = await service.getCharacteristic(seLatencycharacteristicUuid);
-        seLatencyCharacteristic.addEventListener('characteristicvaluechanged', handleSeLatencyNotifications);
-        await seLatencyCharacteristic.startNotifications();
+    //     const seLatencyCharacteristic = await service.getCharacteristic(seLatencycharacteristicUuid);
+    //     seLatencyCharacteristic.addEventListener('characteristicvaluechanged', handleSeLatencyNotifications);
+    //     await seLatencyCharacteristic.startNotifications();
 
-        const opusLatencyCharacteristic = await service.getCharacteristic(opusLatencycharacteristicUuid);
-        opusLatencyCharacteristic.addEventListener('characteristicvaluechanged', handleOpusLatencyNotifications);
-        await opusLatencyCharacteristic.startNotifications();
+    //     const opusLatencyCharacteristic = await service.getCharacteristic(opusLatencycharacteristicUuid);
+    //     opusLatencyCharacteristic.addEventListener('characteristicvaluechanged', handleOpusLatencyNotifications);
+    //     await opusLatencyCharacteristic.startNotifications();
         
-        const seEnabledCharacteristic = await service.getCharacteristic(seEnabledcharacteristicUuid);
-        seEnabledCharacteristic.addEventListener('characteristicvaluechanged', handleSeEnabledNotifications);
-        await seEnabledCharacteristic.startNotifications();
+    //     const seEnabledCharacteristic = await service.getCharacteristic(seEnabledcharacteristicUuid);
+    //     seEnabledCharacteristic.addEventListener('characteristicvaluechanged', handleSeEnabledNotifications);
+    //     await seEnabledCharacteristic.startNotifications();
 
-        let spectrogram = new Spectrogram('Spectrogram');
-        spectrogram.gotStream(mediaStream);
-        initWaveform();
-        initGraph('SeLatency', 'Speech Enhancement AI Inference Latency (ms)', [0, 10]);
+    //     let spectrogram = new Spectrogram('Spectrogram');
+    //     spectrogram.gotStream(mediaStream);
+    //     initWaveform();
+    //     initGraph('SeLatency', 'Speech Enhancement AI Inference Latency (ms)', [0, 10]);
 
-        pairButton.style.backgroundColor = 'green';
-        pairButton.style.color = 'white';
-        pairButton.innerHTML = "PAIRED";
-        msg('Listening, speech enhancement is disabled.');
-        snack('Connected. Press play to hear audio, Button 0 to toggle speech enhancement.', 0);
-    }
-
-
-    function onDisconnected(event) {
-        let device = event.target;
-        pairButton.style.backgroundColor = "red";
-        pairButton.innerHTML = "PAIR";
-        snack("Device disconnected, please retry", 1)
-        snack('Device ' + device.name + ' has been disconnected.', 1);
-        msg("Disconnected");
-    }
-
-    async function decodeToQueue2 (audioData) { // AudioData object
-        ab = new Float32Array(960);
-        audioData.copyTo(ab, {planeIndex: 0});
-        pcmData = ab; // for animation
-        decoderController.enqueue(audioData.duration);
-        await audioWriter.write(audioData);
-        requestAnimationFrame(updateWaveform);
-    }
-
-    function onAudioError(error) {
-        console.log(error);
-    }
-
-    function handleNotifications(event) {
-        // let value = event.target.value; // This is a DataView
-        //  Decode the audio data from the Opus frame
-        const init = {
-            type: "key",
-            data: event.target.value, // This is a DataView
-            timestamp: chunkNum*20000,
-            duration: 20000,
-        };
-        chunkNum++;
-        chunk = new EncodedAudioChunk(init);
-        audioDecoder.decode(chunk);
-    }
-
-    function handleOpusLatencyNotifications(event) {
-        let value = event.target.value; // This is a DataView
-        opusLatency = value.getUint32(0, true)/1000;
-    }
-
-    function handleSeLatencyNotifications(event) {
-        let value = event.target.value; // This is a DataView
-        let latency = value.getUint32(0, true)/1000;
-        if (seEnabledFlag == 0) {
-            latency = 0; // if se is disabled, latency is 0
-        }
-        // seLatencyData.push(latency);
-        // if (seLatencyData.length > 20) { seLatencyData.shift(); }
-
-        // snack('Speech enhancement latency: ' + value.getUint32(0, true), 0);
-        // console.log(seLatencyData);
-        // Plotly.restyle('SeLatency', { y: [seLatencyData] });
-        Plotly.newPlot('SeLatency', 
-        [{
-            labels: ['Speech Neural Network', 'Audio Encoder', 'Idle'],
-            values: [latency*2,opusLatency,(19.2-latency*2-opusLatency)],
-            marker: {
-                'colors': [
-                'rgb(0, 204, 0)',
-                'rgb(255, 255, 0)',
-                'rgb(0, 0, 195)'
-            ]
-            },
-            name: 'CPU Utilization',
-            type: 'pie',
-
-        }],{
-            plot_bgcolor: '#111111',
-            paper_bgcolor: '#111111',
-            margin: { l: 8, r: 8, b: 18, t: 18 }
-            // height: 400,
-            // width: 500
-        });
-        // Plotly.restyle('SeLatency', { y: [latency] });
+    //     pairButton.style.backgroundColor = 'green';
+    //     pairButton.style.color = 'white';
+    //     pairButton.innerHTML = "PAIRED";
+    //     msg('Listening, speech enhancement is disabled.');
+    //     snack('Connected. Press play to hear audio, Button 0 to toggle speech enhancement.', 0);
+    // }
 
 
-    }
+    // function onDisconnected(event) {
+    //     let device = event.target;
+    //     pairButton.style.backgroundColor = "red";
+    //     pairButton.innerHTML = "PAIR";
+    //     snack("Device disconnected, please retry", 1)
+    //     snack('Device ' + device.name + ' has been disconnected.', 1);
+    //     msg("Disconnected");
+    // }
 
-    function handleSeEnabledNotifications(event) {
-        let value = event.target.value; // This is a DataView
+    // async function decodeToQueue2 (audioData) { // AudioData object
+    //     ab = new Float32Array(960);
+    //     audioData.copyTo(ab, {planeIndex: 0});
+    //     pcmData = ab; // for animation
+    //     decoderController.enqueue(audioData.duration);
+    //     await audioWriter.write(audioData);
+    //     requestAnimationFrame(updateWaveform);
+    // }
 
-        if (value.getUint8(0) == 1) {
-            msg('Speech enhancement is enabled.',0);
-            seEnabledFlag = 1;
-        } else {
-            msg('Speech enhancement is disabled.',0);
-            seEnabledFlag = 0;
-        }
-        // msg('SE Enabled: ' + value.getUint8(0), 0);
-    }
+    // function onAudioError(error) {
+    //     console.log(error);
+    // }
+
+    // function handleNotifications(event) {
+    //     // let value = event.target.value; // This is a DataView
+    //     //  Decode the audio data from the Opus frame
+    //     const init = {
+    //         type: "key",
+    //         data: event.target.value, // This is a DataView
+    //         timestamp: chunkNum*20000,
+    //         duration: 20000,
+    //     };
+    //     chunkNum++;
+    //     chunk = new EncodedAudioChunk(init);
+    //     audioDecoder.decode(chunk);
+    // }
+
+    // function handleOpusLatencyNotifications(event) {
+    //     let value = event.target.value; // This is a DataView
+    //     opusLatency = value.getUint32(0, true)/1000;
+    // }
+
+    // function handleSeLatencyNotifications(event) {
+    //     let value = event.target.value; // This is a DataView
+    //     let latency = value.getUint32(0, true)/1000;
+    //     if (seEnabledFlag == 0) {
+    //         latency = 0; // if se is disabled, latency is 0
+    //     }
+    //     // seLatencyData.push(latency);
+    //     // if (seLatencyData.length > 20) { seLatencyData.shift(); }
+
+    //     // snack('Speech enhancement latency: ' + value.getUint32(0, true), 0);
+    //     // console.log(seLatencyData);
+    //     // Plotly.restyle('SeLatency', { y: [seLatencyData] });
+    //     Plotly.newPlot('SeLatency', 
+    //     [{
+    //         labels: ['Speech Neural Network', 'Audio Encoder', 'Idle'],
+    //         values: [latency*2,opusLatency,(19.2-latency*2-opusLatency)],
+    //         marker: {
+    //             'colors': [
+    //             'rgb(0, 204, 0)',
+    //             'rgb(255, 255, 0)',
+    //             'rgb(0, 0, 195)'
+    //         ]
+    //         },
+    //         name: 'CPU Utilization',
+    //         type: 'pie',
+
+    //     }],{
+    //         plot_bgcolor: '#111111',
+    //         paper_bgcolor: '#111111',
+    //         margin: { l: 8, r: 8, b: 18, t: 18 }
+    //         // height: 400,
+    //         // width: 500
+    //     });
+    //     // Plotly.restyle('SeLatency', { y: [latency] });
+
+
+    // }
+
+    // function handleSeEnabledNotifications(event) {
+    //     let value = event.target.value; // This is a DataView
+
+    //     if (value.getUint8(0) == 1) {
+    //         msg('Speech enhancement is enabled.',0);
+    //         seEnabledFlag = 1;
+    //     } else {
+    //         msg('Speech enhancement is disabled.',0);
+    //         seEnabledFlag = 0;
+    //     }
+    //     // msg('SE Enabled: ' + value.getUint8(0), 0);
+    // }
 
 
     // Visualization
-    pcmData = []; // for visualization
-    seLatencyData = []; // for visualization
-    opusLatencyData = []; // for visualization
+    // pcmData = []; // for visualization
+    // seLatencyData = []; // for visualization
+    // opusLatencyData = []; // for visualization
 
-    function updateWaveform() {
-        Plotly.restyle('Audio Waveform', { y: pcmData });
-    }
+    // function updateWaveform() {
+    //     Plotly.restyle('Audio Waveform', { y: pcmData });
+    // }
 
-    function initWaveform() {
-        var title = 'Audio Waveform';
+    // function initWaveform() {
+    //     var title = 'Audio Waveform';
 
-        Plotly.plot(title, 
-        [{  
-            y: [],
-            name: "Amplitude",
-            mode: 'lines',
-            width: 1,
-            line: { width: 1, color:  "#FF355E"}
-        }], 
-        {
-            plot_bgcolor: '#111111',
-            paper_bgcolor: '#111111',
-            margin: { l: 8, r: 8, b: 18, t: 18 },
-            showlegend: false,
-            yaxis: {
-            'showticklabels': false,
-            'autorange': false,
-            'range': [-.75, .75]
-        },
-        xaxis: {
-                'range': [0, 960],
-                'showticklabels': false,
-                'autorange': false,
-                'showgrid': true,
-                'zeroline': true,
-                tickfont: { size: 8 }
-            }
-        });
-    }
+    //     Plotly.plot(title, 
+    //     [{  
+    //         y: [],
+    //         name: "Amplitude",
+    //         mode: 'lines',
+    //         width: 1,
+    //         line: { width: 1, color:  "#FF355E"}
+    //     }], 
+    //     {
+    //         plot_bgcolor: '#111111',
+    //         paper_bgcolor: '#111111',
+    //         margin: { l: 8, r: 8, b: 18, t: 18 },
+    //         showlegend: false,
+    //         yaxis: {
+    //         'showticklabels': false,
+    //         'autorange': false,
+    //         'range': [-.75, .75]
+    //     },
+    //     xaxis: {
+    //             'range': [0, 960],
+    //             'showticklabels': false,
+    //             'autorange': false,
+    //             'showgrid': true,
+    //             'zeroline': true,
+    //             tickfont: { size: 8 }
+    //         }
+    //     });
+    // }
 
     // function initGraph(id, title, yaxis) {
     //     Plotly.plot(id, 
@@ -604,173 +616,173 @@
     // }
 
 
-    function initGraph(id, title, yaxis) {
-        Plotly.newPlot('SeLatency', 
-        [{
-            labels: ['SE Latency', 'Opus Latency', 'Idle'],
-            values: [5,5,5],
-            name: 'Speech Enhancement AI Inference Latency (ms)',
-            type: 'pie',
+    // function initGraph(id, title, yaxis) {
+    //     Plotly.newPlot('SeLatency', 
+    //     [{
+    //         labels: ['SE Latency', 'Opus Latency', 'Idle'],
+    //         values: [5,5,5],
+    //         name: 'Speech Enhancement AI Inference Latency (ms)',
+    //         type: 'pie',
 
-        }],
-        {
-            height: 400,
-            width: 500
-        });     
-        // Plotly.newPlot(id, 
-        // [{
-        //     x: ['Latency'],
-        //     y: [5],
-        //     name: title,
-        //     type: 'bar',
+    //     }],
+    //     {
+    //         height: 400,
+    //         width: 500
+    //     });     
+    //     // Plotly.newPlot(id, 
+    //     // [{
+    //     //     x: ['Latency'],
+    //     //     y: [5],
+    //     //     name: title,
+    //     //     type: 'bar',
 
-        // }]);
-    }
+    //     // }]);
+    // }
 
 // Modified to only show bottom 8khz, since the original data is sampled at 16khz
 // Since the encoder is fixed at 48k (so, 24k msx freq), we have to just chop off the top 16k
-function Spectrogram(id) {
-    var self = this;
+// function Spectrogram(id) {
+//     var self = this;
 
-    self.canvas = document.getElementById(id);
-    self.width  = self.canvas.width;
-    self.height = self.canvas.height;
-    self.ctx = self.canvas.getContext('2d');
-    self.imageData = self.ctx.getImageData(0, 0, self.width, self.height);
+//     self.canvas = document.getElementById(id);
+//     self.width  = self.canvas.width;
+//     self.height = self.canvas.height;
+//     self.ctx = self.canvas.getContext('2d');
+//     self.imageData = self.ctx.getImageData(0, 0, self.width, self.height);
 
-    self.data = self.imageData.data;
+//     self.data = self.imageData.data;
 
-    self.buf = new ArrayBuffer(self.imageData.data.length);
-    self.buf8 = new Uint8ClampedArray(self.buf);
-    self.data32 = new Uint32Array(self.buf);
+//     self.buf = new ArrayBuffer(self.imageData.data.length);
+//     self.buf8 = new Uint8ClampedArray(self.buf);
+//     self.data32 = new Uint32Array(self.buf);
 
-    self.x = 0;
-    self.bufferSize = 512;
-    self.dataBuffer = new Float32Array(self.height);
-    self.uint8array = new Uint8Array(4);
-    self.colorData = new Uint8Array(4 * self.bufferSize);
+//     self.x = 0;
+//     self.bufferSize = 512;
+//     self.dataBuffer = new Float32Array(self.height);
+//     self.uint8array = new Uint8Array(4);
+//     self.colorData = new Uint8Array(4 * self.bufferSize);
 
-    self.gotStream = function(stream) {
-        self.context = new AudioContext();
-        self.sampleRate = self.context.sampleRate;
+//     self.gotStream = function(stream) {
+//         self.context = new AudioContext();
+//         self.sampleRate = self.context.sampleRate;
 
-        var input = self.context.createMediaStreamSource(stream);
-        self.analyser = self.context.createAnalyser();
-        self.analyser.fftSize = self.bufferSize*2;
-        input.connect(self.analyser);
-        self.animate();
-    }
+//         var input = self.context.createMediaStreamSource(stream);
+//         self.analyser = self.context.createAnalyser();
+//         self.analyser.fftSize = self.bufferSize*2;
+//         input.connect(self.analyser);
+//         self.animate();
+//     }
 
-    self.setPixel = function(x, y, red, green, blue, alpha) {
-        self.data32[y * self.width + x] =
-            (alpha << 24) |    // alpha
-            (blue << 16) |      // blue
-            (green <<  8) |     // green
-            red;                // red
-    }
+//     self.setPixel = function(x, y, red, green, blue, alpha) {
+//         self.data32[y * self.width + x] =
+//             (alpha << 24) |    // alpha
+//             (blue << 16) |      // blue
+//             (green <<  8) |     // green
+//             red;                // red
+//     }
 
-    self.getPixel = function(x, y) {
-        var value = self.data32[y * self.width + x];
-        var channels = self.uint32Touint8(value)
-        return channels;
-    }
+//     self.getPixel = function(x, y) {
+//         var value = self.data32[y * self.width + x];
+//         var channels = self.uint32Touint8(value)
+//         return channels;
+//     }
 
-    self.uint32Touint8 = function(uint32) {
-        self.uint8array[3] = uint32 >> 24 & 0xff;
-        self.uint8array[2] = uint32 >> 16 & 0xff;
-        self.uint8array[1] = uint32 >> 8 & 0xff;
-        self.uint8array[0] = uint32 & 0xff;
-        return data
-    }
+//     self.uint32Touint8 = function(uint32) {
+//         self.uint8array[3] = uint32 >> 24 & 0xff;
+//         self.uint8array[2] = uint32 >> 16 & 0xff;
+//         self.uint8array[1] = uint32 >> 8 & 0xff;
+//         self.uint8array[0] = uint32 & 0xff;
+//         return data
+//     }
 
-    self.drawColumn = function() {
-        var value = 0;
-        for (var y = 0; y < self.height; y++) {
-            var x = col;
-            self.setPixel(x, y, value, value, value, 255)
-        }
-    }
+//     self.drawColumn = function() {
+//         var value = 0;
+//         for (var y = 0; y < self.height; y++) {
+//             var x = col;
+//             self.setPixel(x, y, value, value, value, 255)
+//         }
+//     }
 
-    self.getData = function() {
-        var freqByteData = new Uint8Array(self.analyser.frequencyBinCount);
-        self.analyser.getByteFrequencyData(freqByteData);
+//     self.getData = function() {
+//         var freqByteData = new Uint8Array(self.analyser.frequencyBinCount);
+//         self.analyser.getByteFrequencyData(freqByteData);
 
-        // Reverse the direction, making lower frequencies on the bottom.
-        // BUT we only want to render bottom.
-        var startFrom = Math.floor(self.analyser.frequencyBinCount/3);
-        // for (var i = self.analyser.frequencyBinCount - 1; i >= 0; i--) {
-        for (var i = startFrom - 1; i >= 0; i--) {
-            // map whatever freqData number of buckets are present to whatever height we have
-            // var pixel = Math.floor((freqByteData.length - i) * self.height / freqByteData.length); // copilot guessed wrong
-            var pixel = Math.floor(3*(i) * self.height / freqByteData.length); // fixed
-            self.dataBuffer[pixel] = freqByteData[(startFrom - 1) - i] / 255.0;
-        }
-        return self.dataBuffer
-    }
+//         // Reverse the direction, making lower frequencies on the bottom.
+//         // BUT we only want to render bottom.
+//         var startFrom = Math.floor(self.analyser.frequencyBinCount/3);
+//         // for (var i = self.analyser.frequencyBinCount - 1; i >= 0; i--) {
+//         for (var i = startFrom - 1; i >= 0; i--) {
+//             // map whatever freqData number of buckets are present to whatever height we have
+//             // var pixel = Math.floor((freqByteData.length - i) * self.height / freqByteData.length); // copilot guessed wrong
+//             var pixel = Math.floor(3*(i) * self.height / freqByteData.length); // fixed
+//             self.dataBuffer[pixel] = freqByteData[(startFrom - 1) - i] / 255.0;
+//         }
+//         return self.dataBuffer
+//     }
 
-    self.color = function(value) {
-        var rgb = {R: 0, G: 0, B: 0};
+//     self.color = function(value) {
+//         var rgb = {R: 0, G: 0, B: 0};
 
-        if (0 <= value && value <= 1 / 8) {
-            rgb.R = 0;
-            rgb.G = 0;
-            rgb.B = 4 * value + .5; // .5 - 1 // b = 1/2
-        } else if (1 / 8 < value && value <= 3 / 8) {
-            rgb.R = 0;
-            rgb.G = 4 * value - .5; // 0 - 1 // b = - 1/2
-            rgb.B = 0;
-        } else if (3 / 8 < value && value <= 5 / 8) {
-            rgb.R = 4*value - 1.5; // 0 - 1 // b = - 3/2
-            rgb.G = 1;
-            rgb.B = -4 * value + 2.5; // 1 - 0 // b = 5/2
-        } else if (5 / 8 < value && value <= 7 / 8) {
-            rgb.R = 1;
-            rgb.G = -4 * value + 3.5; // 1 - 0 // b = 7/2
-            rgb.B = 0;
-        } else if (7 / 8 < value && value <= 1) {
-            rgb.R = -4*value + 4.5; // 1 - .5 // b = 9/2
-            rgb.G = 0;
-            rgb.B = 0;
-        } else {    // should never happen - value > 1
-            rgb.R = .5;
-            rgb.G = 0;
-            rgb.B = 0;
-        }
+//         if (0 <= value && value <= 1 / 8) {
+//             rgb.R = 0;
+//             rgb.G = 0;
+//             rgb.B = 4 * value + .5; // .5 - 1 // b = 1/2
+//         } else if (1 / 8 < value && value <= 3 / 8) {
+//             rgb.R = 0;
+//             rgb.G = 4 * value - .5; // 0 - 1 // b = - 1/2
+//             rgb.B = 0;
+//         } else if (3 / 8 < value && value <= 5 / 8) {
+//             rgb.R = 4*value - 1.5; // 0 - 1 // b = - 3/2
+//             rgb.G = 1;
+//             rgb.B = -4 * value + 2.5; // 1 - 0 // b = 5/2
+//         } else if (5 / 8 < value && value <= 7 / 8) {
+//             rgb.R = 1;
+//             rgb.G = -4 * value + 3.5; // 1 - 0 // b = 7/2
+//             rgb.B = 0;
+//         } else if (7 / 8 < value && value <= 1) {
+//             rgb.R = -4*value + 4.5; // 1 - .5 // b = 9/2
+//             rgb.G = 0;
+//             rgb.B = 0;
+//         } else {    // should never happen - value > 1
+//             rgb.R = .5;
+//             rgb.G = 0;
+//             rgb.B = 0;
+//         }
 
-        return [rgb.R, rgb.G, rgb.B, 1].map(function(d) { return parseInt(d * 255, 10)})
-    }
+//         return [rgb.R, rgb.G, rgb.B, 1].map(function(d) { return parseInt(d * 255, 10)})
+//     }
 
-    self.colorizeData = function(data) {
-        var d;
-        for(var i = 0, n = data.length; i < n; i++) {
-            d = self.color(data[i]);
-            self.colorData.set(d, i * 4);
-        }
-        return self.colorData;
-    }
+//     self.colorizeData = function(data) {
+//         var d;
+//         for(var i = 0, n = data.length; i < n; i++) {
+//             d = self.color(data[i]);
+//             self.colorData.set(d, i * 4);
+//         }
+//         return self.colorData;
+//     }
 
-    self.addColumn = function(colorizeData) {
-        for (var y = 0; y < self.height; y++) {
-            self.setPixel(self.x, y, colorizeData[4 * y + 0], colorizeData[4 * y + 1], colorizeData[4 * y + 2], colorizeData[4 * y + 3]);
-        }
-        self.x++;
-        self.x %= self.width;
-    }
+//     self.addColumn = function(colorizeData) {
+//         for (var y = 0; y < self.height; y++) {
+//             self.setPixel(self.x, y, colorizeData[4 * y + 0], colorizeData[4 * y + 1], colorizeData[4 * y + 2], colorizeData[4 * y + 3]);
+//         }
+//         self.x++;
+//         self.x %= self.width;
+//     }
 
-    self.drawFrame = function(data) {
-        var data = data || self.getData();
-        var colorData = self.colorizeData(data)
+//     self.drawFrame = function(data) {
+//         var data = data || self.getData();
+//         var colorData = self.colorizeData(data)
 
-        self.addColumn(colorData);
-        self.imageData.data.set(self.buf8);
-        self.ctx.putImageData(self.imageData, 0, 0);
-    }
+//         self.addColumn(colorData);
+//         self.imageData.data.set(self.buf8);
+//         self.ctx.putImageData(self.imageData, 0, 0);
+//     }
 
-    self.animate = function() {
-        self.drawFrame();
-        requestAnimationFrame(self.animate);
-    }
-}
+//     self.animate = function() {
+//         self.drawFrame();
+//         requestAnimationFrame(self.animate);
+//     }
+// }
 
   // Top middle information label
   function msg(m) {
