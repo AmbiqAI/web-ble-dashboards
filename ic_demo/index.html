@@ -284,7 +284,9 @@
         // Re-render the images
         for (let i = 0; i < existingImageIds.length; i++) {
             let img = document.getElementById('IC' + i);
-            img.src = 'images/'+existingImageLabels[i]+'/' + ('000' + existingImageIds[i]).slice(-4) + '.png';
+            // convert image labels to lowercase
+            lowerLabel = existingImageLabels[i].toLowerCase();
+            img.src = 'images/'+lowerLabel+'/' + ('000' + existingImageIds[i]).slice(-4) + '.png';
             document.getElementsByClassName('classl')[i].innerHTML = existingImageLabels[i];
         }
     }
