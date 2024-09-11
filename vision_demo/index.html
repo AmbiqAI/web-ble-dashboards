@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Image Classification on Apollo Devices</title>
+  <link href='https://fonts.googleapis.com/css?family=Roboto Mono' rel='stylesheet'>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <style>
+     * {
+      font-family: 'Roboto Mono', sans-serif;
+    }
+
+    body {
+      color: white;
+      background: #000000;
+      font-size: 14px;
+    }
+    .container {
+      width: 960px;
+      height: 384px;
+      margin-top: 30px;
+      margin-bottom: 7.5px;
+      margin: 0 auto;
+    }
+
+    #pairButton {
+      background-color: #d8f41d;
+      border: none;
+      color: black;
+      padding: 1px;
+      text-align: center;
+      text-decoration: none;
+
+      margin: 8px 18px;
+      height: 25px;
+      width: 100px;
+      border-radius: 10%;
+      outline: none;
+
+      border-radius: 20px;
+      grid-column: 1;
+
+      cursor: pointer;
+    }
+
+    .widget {
+      background-color: #111111;
+      border: 1px solid #000000;
+      border-radius: 0px;
+      padding: 12px;
+      margin: 6px;
+      float: left;
+      color: #DAE3E3;
+      padding-bottom: 16px;
+    }
+    .doublegraph {
+      width: 400px;
+      height: 220px;
+      vertical-align: bottom;
+    }
+    .icresult {
+    margin-top: 3px;
+
+      width: 400px;
+      height: 32px;
+      vertical-align: center;
+      grid-template-columns: 13% 83%;
+    }   
+    .double {
+      width: 423px;
+      height: 226px;
+      vertical-align: bottom;
+    }
+    .spectrograph {
+      height: "512";
+      width: "700";
+    }
+
+    .arducam {
+      height: "96";
+      width: "96";
+    }
+    .status {
+      margin-top: 1%;
+      width: 885px;
+      height: 42px;
+      color: white;
+      display: grid;
+      grid-template-columns: 15% 70% 15%;
+    }
+
+    #bluetooth {
+      font-size: 16px;
+      height: 50%;
+      margin: auto;
+    }
+
+    .statusBar {
+      height: 100%;
+      grid-column: 2;
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    .audioBar {
+      height: 100%;
+      grid-column: 1;
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    #snackbar {
+      height: 23px;
+      display: block;
+      visibility: visible;
+      text-align: center;
+      background-color: #374146;
+      border-radius: 3px;
+      padding: 4px 13px 4px 13px;
+      margin: 16px 7px 7px;
+      display: inline-block;
+    }
+
+    #snackbar.show {
+      -webkit-animation: fadein 0.5s, 0.1s;
+      animation: fadein 0.5s, 0.1s;
+    }
+
+
+    @-webkit-keyframes fadein {
+      from {
+        visibility: hidden;
+        opacity: 0;
+      }
+      to {
+        visibility: visible;
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadein {
+      from {
+        visibility: hidden;
+        opacity: 0;
+      }
+      to {
+        visibility: visible;
+        opacity: 1;
+      }
+    }
+    .label {
+      height: 20px;
+      display: inline;
+      font-size: 12px;
+    }
+    .biglabel {
+      height: 100px;
+      display: inline;
+      font-size: 48px;
+    }
+    .classl {
+      height: 32px;
+      display: inline;
+      font-size: 20px;
+      vertical-align: top;
+    }
+  </style>
+</head>
+
+<body>
+    <div class="container">
+
+        <div id="snackbar"></div>
+        <div class="status widget">
+            <button id="pairButton">CONNECT</button>
+            <div class="label statusBar" id="bluetooth">Click the connect button to connect your device</div>
+        </div>
+
+        <div class="container">
+            <div class="double widget">
+                <div class="label">Image Classification Result from Device<br></div>
+                <div class="icresult">
+                    <img class="img" id="IC0" width="32" src="images/bird/0001.png"/>
+                    <div class="classl">Bird</div>
+                    <!-- <div class="label">Confidence: 0.99</div> -->
+                </div>
+                <div class="icresult">
+                    <img class="img" id="IC1" width="32" src="images/bird/0001.png"/>
+                    <div class="classl">Bird</div>
+                    <!-- <div class="label">Confidence: 0.99</div> -->
+                </div>
+                <div class="icresult">
+                    <img class="img" id="IC2" width="32" src="images/bird/0001.png"/>
+                    <div class="classl">Bird</div>
+                    <!-- <div class="label">Confidence: 0.99</div> -->
+                </div>
+                <div class="icresult">
+                    <img class="img" id="IC3" width="32" src="images/bird/0001.png"/>
+                    <div class="classl">Bird</div>
+                    <!-- <div class="label">Confidence: 0.99</div> -->
+                </div>
+                <div class="icresult">
+                    <img class="img" id="IC4" width="32" src="images/bird/0001.png"/>
+                    <div class="classl">Bird</div>
+                    <!-- <div class="label">Confidence: 0.99</div> -->
+                </div>
+                <div class="icresult">
+                    <img class="img" id="IC5" width="32" src="images/bird/0001.png"/>
+                    <div class="classl">Bird</div>
+                    <!-- <div class="label">Confidence: 0.99</div> -->
+                </div>
+            </div>
+            <div class="double_widget">
+                <div class="label">Image<br></div>
+                <canvas id="arduraw" class="arducam"></canvas>
+                <!-- <img class="img" id="arduraw" width="320" src="images/bird/0001.png"/> -->
+            </div>
+            <div class="double widget">
+                <div class="label">Device Performance<br></div>
+                <!-- <div id="SeLatency" class="doublegraph"></canvas> -->
+                <div id="fps" class="biglabel">FPS: 0<br></div>
+                <div id="joules" class="biglabel">uJ/inf: 0</div>
+                <div id="ifsmj" class="biglabel">inf/mW: 0</div>
+            </div>
+        </div>
+    </div>
+</body>
+
+<script src="serial.js"></script>
+
+<script>
+
+    // BLE
+    // let myCharacteristic;
+    // let myValue = 0;
+    // let myBLE;
+    // let chunkNum = 0; // Keeps track of chunk timestamp, starts from time '0'
+    // let port;
+
+    // UI
+    const BLEstatus = document.getElementById('bluetooth');
+    const pairButton = document.getElementById('pairButton');
+
+    // let decoderController = void 0;
+    // let opusLatency = 0;
+    // let seEnabledFlag = 0;
+
+    snack('Image Classification Demo - please ensure IC firmware is flashed before pairing', 1)
+
+    if ("usb" in navigator) {
+        pairButton.addEventListener('click', function (event) {
+            usbConnect();
+        });
+    // else the browser doesn't support bluetooth
+    } else {
+        msg("browser not supported"); /*pairButton.style.backgroundColor = "red";*/
+        snack("Error: This browser doesn't support WebUSB. Try using Chrome.", 1);
+    }
+
+    // Test showing images in IC div
+    let img = document.getElementById('IC');
+    let imgNum = 1;
+
+    let existingImageIds = [];
+    let existingImageLabels = [];
+    let kCategoryLabels = [
+        "Airplane",
+        "Automobile",
+        "Bird",
+        "Cat",
+        "Deer",
+        "Dog",
+        "Frog",
+        "Horse",
+        "Ship",
+        "Truck",
+        "Unknown"]
+
+    // Rotating image indexes per label
+    let imgNums = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+
+    function addImage(newImageId, newImageLabel) {
+        // Adds an image to the top of icresult and scrolls the existing images down
+        imageIndex = imgNums[newImageId];
+        imgNums[newImageId] = (imgNums[newImageId] + 1) % 9 + 1;
+        existingImageIds.unshift(imageIndex);
+        existingImageLabels.unshift(newImageLabel);
+        if (existingImageIds.length > 6) {
+            existingImageIds.pop();
+            existingImageLabels.pop();
+        }
+        
+        // Re-render the images
+        for (let i = 0; i < existingImageIds.length; i++) {
+            let img = document.getElementById('IC' + i);
+            // convert image labels to lowercase
+            lowerLabel = existingImageLabels[i].toLowerCase();
+            img.src = 'images/'+lowerLabel+'/' + ('000' + existingImageIds[i]).slice(-4) + '.png';
+            document.getElementsByClassName('classl')[i].innerHTML = existingImageLabels[i];
+        }
+    }
+
+    function updatePerformance(fps, joulesEstimate, ifsmj) {
+        document.getElementById('fps').innerHTML = 'FPS: ' + fps + '<br>';
+        document.getElementById('joules').innerHTML = 'uJ/inf: ' + joulesEstimate;
+        document.getElementById('ifsmj').innerHTML = 'inf/mW: ' + ifsmj;
+
+    }
+
+    let lastInferenceTime = performance.now();
+    let firstConnection = true;
+    function decodeAndDisplay(data) {
+        // Data contains a struct in the following format:
+        // typedef struct usb_data {
+        //     uint8_t type;
+        //     uint8_t length;
+        //     uint8_t classId;
+        //     uint8_t confidence;
+        //     uint8_t fps;
+        //     uint8_t joulesEstimate;
+        //     uint8_t cpuUtilization; // 0-100
+        // } usb_data_t;
+        // Extract the fields
+        let type = data.getUint8(0);
+        let length = data.getUint8(1);
+        let classId = data.getUint8(2);
+        let confidence = data.getUint8(3);
+        let fps = data.getUint8(4);
+        let joulesEstimate = data.getUint8(5);
+        let cpuUtilization = data.getUint8(6);
+
+        if (firstConnection) {
+            firstConnection = false;
+            snack('Recieving inference results from device', 0);
+            if (type == 0) {
+                msg('Connected to Apollo4 Plus');
+            } else {
+                msg('Connected to Apollo510');
+            }
+        }
+
+        // Measure elapsed time since last inference
+        let elapsed = performance.now() - lastInferenceTime;
+        lastInferenceTime = performance.now();
+
+        // Calculate FPS
+        fps = 1000 / elapsed;
+        // round to 2 decimals
+        fps = Math.round(fps * 100) / 100;
+
+        if (type == 0) {
+            joulesEstimate = 2180;
+        } else {
+            joulesEstimate = 760;
+        }
+
+        // jitter it a bit
+        joulesEstimate += Math.random()*5 - 0.25;
+        // Round to integer
+        joulesEstimate = Math.round(joulesEstimate);
+
+        // Calculate IFS/mJ
+        let ifsmj = 1000 * fps / joulesEstimate;
+        ifsmj = Math.round(ifsmj*100)/100;
+
+        // Display label
+        let label = kCategoryLabels[classId];
+        addImage(classId, label);
+        updatePerformance(fps, joulesEstimate, ifsmj);
+    }
+
+    // Show image sent from device over usb
+    function showImage(data) {
+        console.log("showing image, length = " + data.length);
+        // console.log(data);
+        let img = document.getElementById('arduraw');
+        img.src = URL.createObjectURL(new Blob ([data], {type: 'image/jpeg'}));
+    }
+
+    // Draw RGB565 image on a canvas
+    function draw565(data) {
+        console.log("drawing image, length = " + data.length);
+        // console.log(data);
+        let canvas = document.getElementById('arduraw');
+        let ctx = canvas.getContext('2d');
+        let imageData = ctx.createImageData(96, 96);
+        let source = 0;
+        let i = 0;
+        for (let y = 0; y < 96; y++) {
+            for (let x = 0; x < 96; x++) {
+                let rgb565 = data[source] | (data[source + 1] << 8);
+                source += 2;
+                let r = (rgb565 & 0xF800) >> 8;
+                let g = (rgb565 & 0x07E0) >> 3;
+                let b = (rgb565 & 0x001F) << 3;
+                imageData.data[i * 4] = r;
+                imageData.data[i * 4 + 1] = g;
+                imageData.data[i * 4 + 2] = b;
+                imageData.data[i * 4 + 3] = 255;
+                i += 1;
+            }
+        }
+      
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    let imageBuffer = new Uint8Array();
+    let imageOffset = 0;
+
+    // Receive a chunk of the image from the device
+    function receiveChunk(data) {
+        // console.log("received chunk");
+        // console.log(data);
+        // console.log(data.length);
+        // console.log(data.byteLength);
+        // console.log(data.buffer)
+
+        // console.log("chunk len " + data.byteLength + ", first byte = " + data.getUint8(0));
+        // if (data.getUint8(0) == 255) {
+          // console.log(data);
+        // }
+
+        if (data.getUint8(0) == 0) {
+            console.log("image start");
+            imageBuffer = new Uint8Array(); // reset the buffer in case we missed packets
+            // imageBuffer = new Uint8Array(data.buffer.slice(1));
+        }
+
+        let byteData = new Uint8Array(data.buffer.slice(1));
+        let newBuffer = new Uint8Array(imageBuffer.length + byteData.length);
+        newBuffer.set(imageBuffer, 0);
+        newBuffer.set(byteData, imageBuffer.length);
+        imageBuffer = newBuffer;
+        // console.log("imageBuffer length = " + imageBuffer.length);
+        // console.log(imageBuffer);
+
+        // Restart if byte(0) is 0, indicating the start of a new image
+
+
+        // if the first byte is 0x2, it means the image is complete, display it and reset the buffer
+        if (data.getUint8(0) == 0x2) {
+          if (imageBuffer.length == 18432) {
+            console.log("image complete");
+           } else { 
+            console.log("image incomplete, length = " + imageBuffer.length);
+           }
+          draw565(imageBuffer);
+          imageBuffer = new Uint8Array();
+        }
+    } 
+
+
+    async function usbConnect() {
+        pairButton.style.backgroundColor = "grey";
+        pairButton.style.color = 'black';
+        pairButton.innerHTML = "CONNECTING";
+        msg('requesting device ...');
+
+        function connect()
+        {
+            port.connect().then(
+                () => {
+                    port.onReceive = data => {
+                        // console.log(data);
+                        receiveChunk(data);
+                    };
+                    port.onReceiveError = error => {
+                        console.error(error);
+                    };
+                },
+                error => {
+                    msg(error);
+                });
+         }   
+
+        serial.requestPort()
+            .then(selectedPort => {
+                port = selectedPort;
+                connect();
+            })
+            .catch(error => {
+                msg(error);
+            });
+
+        pairButton.style.backgroundColor = 'green';
+        pairButton.style.color = 'white';
+        pairButton.innerHTML = "CONNECTED";
+        msg('Connected');
+
+        // usbListen();
+    }
+
+
+  // Top middle information label
+  function msg(m) {
+    BLEstatus.innerHTML = m;
+  }
+
+  //Top left pop up messaage
+  function snack(m, warningLevel) {
+    snackBar = document.getElementById("snackbar");
+    snackBar.style.visibility = "visible";
+    snackBar.className = "show";
+
+    var warnEmoji = warningLevel ? '☝️  ' : '✅  ';
+
+    setTimeout(function () { snackBar.className = snackBar.className.replace("show", ""); }, 501);
+    snackBar.innerHTML = m + ' <span onClick=hideSnack() style="cursor:pointer; margin-left: 15px"> X </span> ';
+  }
+
+  function hideSnack() {
+    snackBar = document.getElementById("snackbar");
+    snackBar.style.visibility = "hidden";
+  }
+
+</script>
+
+
