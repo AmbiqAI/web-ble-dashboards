@@ -213,8 +213,8 @@
             </div>
             <div class="double_widget">
                 <div class="label">Image<br></div>
-                <canvas id="arduraw" class="arducam"></canvas>
-                <!-- <img class="img" id="arduraw" width="320" src="images/bird/0001.png"/> -->
+                <canvas id="ardurawrgb" class="arducam"></canvas>
+                <img class="img" id="ardurawjpg" width="320" src="images/bird/0001.png"/>
             </div>
             <div class="double widget">
                 <div class="label">Device Performance<br></div>
@@ -374,7 +374,7 @@
     function showImage(data) {
         console.log("showing image, length = " + data.length);
         // console.log(data);
-        let img = document.getElementById('arduraw');
+        let img = document.getElementById('ardurawjpg');
         img.src = URL.createObjectURL(new Blob ([data], {type: 'image/jpeg'}));
     }
 
@@ -382,7 +382,7 @@
     function draw565(data) {
         console.log("drawing image, length = " + data.length);
         // console.log(data);
-        let canvas = document.getElementById('arduraw');
+        let canvas = document.getElementById('ardurawrgb');
         let ctx = canvas.getContext('2d');
         let imageData = ctx.createImageData(96, 96);
         let source = 0;
@@ -422,30 +422,37 @@
         // }
 
         if (data.getUint8(0) == 0) {
-            console.log("image start");
+            // console.log("image start");
             imageBuffer = new Uint8Array(); // reset the buffer in case we missed packets
             // imageBuffer = new Uint8Array(data.buffer.slice(1));
         }
 
-        let byteData = new Uint8Array(data.buffer.slice(1));
+        let byteData = new Uint8Array(data.buffer.slice(2));
         let newBuffer = new Uint8Array(imageBuffer.length + byteData.length);
         newBuffer.set(imageBuffer, 0);
         newBuffer.set(byteData, imageBuffer.length);
         imageBuffer = newBuffer;
-        // console.log("imageBuffer length = " + imageBuffer.length);
-        // console.log(imageBuffer);
+        // console.log("imageBuffer length = " + byteData.length);
+        // console.log(byteData);
 
         // Restart if byte(0) is 0, indicating the start of a new image
 
 
         // if the first byte is 0x2, it means the image is complete, display it and reset the buffer
         if (data.getUint8(0) == 0x2) {
-          if (imageBuffer.length == 18432) {
-            console.log("image complete");
-           } else { 
-            console.log("image incomplete, length = " + imageBuffer.length);
-           }
-          draw565(imageBuffer);
+          // if (imageBuffer.length == 18432) {
+          //   console.log("image complete");
+          //  } else { 
+          //   console.log("image incomplete, length = " + imageBuffer.length);
+          //  }
+          
+          // Check mode and call right function
+          if (data.getUint8(1) == 1) {
+            showImage(imageBuffer); // 1 means 'jpg'
+          } else {
+            draw565(imageBuffer);
+          }
+          // draw565(imageBuffer);
           imageBuffer = new Uint8Array();
         }
     } 
