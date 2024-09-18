@@ -370,6 +370,78 @@
         updatePerformance(fps, joulesEstimate, ifsmj);
     }
 
+    // Decode and display metadata
+    function decodeAndDisplayMetadata(data) {
+      // The metadata is in the following format:
+      //   typedef struct usb_metadata {
+      //     uint8_t descriptor; // 0/1/2 for first/middle/last chunk, 3 for metadata
+      //     uint8_t cpu_load;
+      //     uint8_t inference_latency;
+      //     uint8_t num_results;
+      //     char id[MAX_RESULTS][20]; // 20 chars max
+      //     uint8_t x[MAX_RESULTS];
+      //     uint8_t y[MAX_RESULTS];
+      //     uint8_t confidence[MAX_RESULTS];
+      // } usb_metadata_t;
+
+      let cpu_load = data.getUint8(1);
+      let inference_latency = data.getUint8(2);
+      let num_results = data.getUint8(3);
+      let results = [];
+      let x = [];
+      let y = [];
+      let confidence = [];
+      let id = [];
+      // console.log("num_results = " + num_results);
+
+      // Extract the results
+      let offset = 4;
+      for (let i = 0; i < num_results; i++) {
+        let id = "";
+        for (let j = 0; j < 20; j++) {
+          let c = data.getUint8(offset + j);
+          if (c == 0) {
+            break;
+          }
+          id += String.fromCharCode(c);
+        }
+        results.push(id);
+        x.push(data.getUint8(offset + 20));
+        y.push(data.getUint8(offset + 21));
+        confidence.push(data.getUint8(offset + 22));
+        offset += 23;
+      }
+
+      // overlay a circle at X, Y, and labels next to the dot on the image
+      let canvas = document.getElementById('ardurawrgb');
+      let ctx = canvas.getContext('2d');
+      ctx.font = "12px Arial";
+      ctx.fillStyle = "white";
+      for (let i = 0; i < num_results; i++) {
+        console.log("x = " + x[i] + ", y = " + y[i] + ", label = " + results[i]);
+        //draw a dot at x/y
+        ctx.beginPath();
+        
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 3;
+
+        ctx.arc(x[i], y[i], 5, 0, 2 * Math.PI);
+        ctx.stroke();
+
+        // ctx.fillText(results[i], x[i], y[i]);
+      }
+
+
+      // let canvas = document.getElementById('ardurawrgb');
+      // let ctx = canvas.getContext('2d');
+      // ctx.font = "12px Arial";
+      // ctx.fillStyle = "white";
+      for (let i = 0; i < num_results; i++) {
+        console.log("x = " + x[i] + ", y = " + y[i] + ", label = " + results[i]);
+        // ctx.fillText(results[i], x[i], y[i]);
+      }    
+    }
+
     // Show image sent from device over usb
     function showImage(data) {
         console.log("showing image, length = " + data.length);
@@ -380,7 +452,7 @@
 
     // Draw RGB565 image on a canvas
     function draw565(data) {
-        console.log("drawing image, length = " + data.length);
+        // console.log("drawing image, length = " + data.length);
         // console.log(data);
         let canvas = document.getElementById('ardurawrgb');
         let ctx = canvas.getContext('2d');
@@ -420,6 +492,13 @@
         // if (data.getUint8(0) == 255) {
           // console.log(data);
         // }
+        // console.log("first byte = " + data.getUint8(0));
+        // Check to see if this is metadata (first byte is 3)
+        if (data.getUint8(0) == 3) {
+            // console.log("metadata");
+            decodeAndDisplayMetadata(data);
+            return;
+        }
 
         if (data.getUint8(0) == 0) {
             // console.log("image start");
@@ -441,7 +520,7 @@
         // if the first byte is 0x2, it means the image is complete, display it and reset the buffer
         if (data.getUint8(0) == 0x2) {
           // if (imageBuffer.length == 18432) {
-          //   console.log("image complete");
+            // console.log("image complete");
           //  } else { 
           //   console.log("image incomplete, length = " + imageBuffer.length);
           //  }
