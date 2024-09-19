@@ -392,7 +392,7 @@
       let y = [];
       let confidence = [];
       let id = [];
-      // console.log("num_results = " + num_results);
+      console.log("num_results = " + num_results);
 
       // Extract the results
       let offset = 4;
@@ -463,13 +463,26 @@
             for (let x = 0; x < 96; x++) {
                 let rgb565 = data[source] | (data[source + 1] << 8);
                 source += 2;
-                let r = (rgb565 & 0xF800) >> 8;
-                let g = (rgb565 & 0x07E0) >> 3;
-                let b = (rgb565 & 0x001F) << 3;
+                let r5 = (rgb565 & 0xF800) >> 11;
+                let g6 = (rgb565 & 0x07E0) >> 5;
+                let b5 = (rgb565 & 0x001F);
+                let r = ( r5 * 527 + 23 ) >> 6;
+                let g = ( g6 * 259 + 33 ) >> 6;
+                let b = ( b5 * 527 + 23 ) >> 6;
+
+
+                // let r = (rgb565 & 0xF800) >> 8;
+                // let g = (rgb565 & 0x07E0) >> 3;
+                // let b = (rgb565 & 0x001F) << 3;
                 imageData.data[i * 4] = r;
                 imageData.data[i * 4 + 1] = g;
                 imageData.data[i * 4 + 2] = b;
                 imageData.data[i * 4 + 3] = 255;
+                // if (i < 10) {
+                //     console.log("i=" + i + " r = " + r + ", g = " + g + ", b = " + b);
+                //     console.log("rgb565 = " + rgb565.toString(16));
+                //     console.log("rgb888 = " + r.toString(16) + g.toString(16) + b.toString(16));
+                // }
                 i += 1;
             }
         }
@@ -495,7 +508,7 @@
         // console.log("first byte = " + data.getUint8(0));
         // Check to see if this is metadata (first byte is 3)
         if (data.getUint8(0) == 3) {
-            // console.log("metadata");
+            console.log("metadata");
             decodeAndDisplayMetadata(data);
             return;
         }
@@ -519,11 +532,6 @@
 
         // if the first byte is 0x2, it means the image is complete, display it and reset the buffer
         if (data.getUint8(0) == 0x2) {
-          // if (imageBuffer.length == 18432) {
-            // console.log("image complete");
-          //  } else { 
-          //   console.log("image incomplete, length = " + imageBuffer.length);
-          //  }
           
           // Check mode and call right function
           if (data.getUint8(1) == 1) {
