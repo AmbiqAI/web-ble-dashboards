@@ -2,7 +2,7 @@
 <html>
 
 <head>
-  <title>Image Classification on Apollo Devices</title>
+  <title>FOMO on Apollo Devicess</title>
   <link href='https://fonts.googleapis.com/css?family=Roboto Mono' rel='stylesheet'>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
@@ -72,6 +72,13 @@
       height: 226px;
       vertical-align: bottom;
     }
+
+    .tall {
+      position: relative;
+      width: 340px;
+      height: 340px;
+      vertical-align: bottom;
+    }
     .spectrograph {
       height: "512";
       width: "700";
@@ -81,6 +88,15 @@
       height: "96";
       width: "96";
     }
+
+    .hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 320px;
+      width: 320px;
+    }
+
     .status {
       margin-top: 1%;
       width: 885px;
@@ -178,42 +194,10 @@
         </div>
 
         <div class="container">
-            <div class="double widget">
-                <div class="label">Image Classification Result from Device<br></div>
-                <div class="icresult">
-                    <img class="img" id="IC0" width="32" src="images/bird/0001.png"/>
-                    <div class="classl">Bird</div>
-                    <!-- <div class="label">Confidence: 0.99</div> -->
-                </div>
-                <div class="icresult">
-                    <img class="img" id="IC1" width="32" src="images/bird/0001.png"/>
-                    <div class="classl">Bird</div>
-                    <!-- <div class="label">Confidence: 0.99</div> -->
-                </div>
-                <div class="icresult">
-                    <img class="img" id="IC2" width="32" src="images/bird/0001.png"/>
-                    <div class="classl">Bird</div>
-                    <!-- <div class="label">Confidence: 0.99</div> -->
-                </div>
-                <div class="icresult">
-                    <img class="img" id="IC3" width="32" src="images/bird/0001.png"/>
-                    <div class="classl">Bird</div>
-                    <!-- <div class="label">Confidence: 0.99</div> -->
-                </div>
-                <div class="icresult">
-                    <img class="img" id="IC4" width="32" src="images/bird/0001.png"/>
-                    <div class="classl">Bird</div>
-                    <!-- <div class="label">Confidence: 0.99</div> -->
-                </div>
-                <div class="icresult">
-                    <img class="img" id="IC5" width="32" src="images/bird/0001.png"/>
-                    <div class="classl">Bird</div>
-                    <!-- <div class="label">Confidence: 0.99</div> -->
-                </div>
-            </div>
-            <div class="double_widget">
-                <div class="label">Image<br></div>
-                <canvas id="ardurawrgb" class="arducam"></canvas>
+            <div class="tall widget">
+                <!-- <div class="label">Image<br></div> -->
+                <!-- <canvas id="ardurawrgb" class="arducam"></canvas> -->
+                <canvas id="visionResult" width="320" height="320" class="hud"></canvas>
                 <img class="img" id="ardurawjpg" width="320" src="images/bird/0001.png"/>
             </div>
             <div class="double widget">
@@ -221,7 +205,7 @@
                 <!-- <div id="SeLatency" class="doublegraph"></canvas> -->
                 <div id="fps" class="biglabel">FPS: 0<br></div>
                 <div id="joules" class="biglabel">uJ/inf: 0</div>
-                <div id="ifsmj" class="biglabel">inf/mW: 0</div>
+                <div id="cpu" class="biglabel">CPU %: 0</div>
             </div>
         </div>
     </div>
@@ -231,22 +215,11 @@
 
 <script>
 
-    // BLE
-    // let myCharacteristic;
-    // let myValue = 0;
-    // let myBLE;
-    // let chunkNum = 0; // Keeps track of chunk timestamp, starts from time '0'
-    // let port;
-
     // UI
     const BLEstatus = document.getElementById('bluetooth');
     const pairButton = document.getElementById('pairButton');
 
-    // let decoderController = void 0;
-    // let opusLatency = 0;
-    // let seEnabledFlag = 0;
-
-    snack('Image Classification Demo - please ensure IC firmware is flashed before pairing', 1)
+    snack('FOMO Demo - please ensure FOMO firmware is flashed before pairing', 1)
 
     if ("usb" in navigator) {
         pairButton.addEventListener('click', function (event) {
@@ -280,6 +253,17 @@
     // Rotating image indexes per label
     let imgNums = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 
+
+    // Vision Stuff
+    // let canvas = document.getElementById('visionResult');
+    // let vctx = canvas.getContext('2d');
+    // let viz = new Image(320,320);
+    // // viz.src = "https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg";
+    // vctx.drawImage(viz, 0,0, 320, 320);
+    // console.log(viz);
+    // viz.src = 'images/bird/0002.png';
+    // vctx.drawImage(viz, 0,0, 320, 320);
+
     function addImage(newImageId, newImageLabel) {
         // Adds an image to the top of icresult and scrolls the existing images down
         imageIndex = imgNums[newImageId];
@@ -301,10 +285,10 @@
         }
     }
 
-    function updatePerformance(fps, joulesEstimate, ifsmj) {
+    function updatePerformance(fps, joulesEstimate, cpu) {
         document.getElementById('fps').innerHTML = 'FPS: ' + fps + '<br>';
         document.getElementById('joules').innerHTML = 'uJ/inf: ' + joulesEstimate;
-        document.getElementById('ifsmj').innerHTML = 'inf/mW: ' + ifsmj;
+        document.getElementById('cpu').innerHTML = 'CPU %: ' + cpu;
 
     }
 
@@ -370,6 +354,12 @@
         updatePerformance(fps, joulesEstimate, ifsmj);
     }
 
+    let last_x_array = [];
+    let last_y_array = [];
+    let last_confidence_array = [];
+    let last_label_array = [];
+    let num_repeated_frames = 0;
+
     // Decode and display metadata
     function decodeAndDisplayMetadata(data) {
       // The metadata is in the following format:
@@ -393,7 +383,7 @@
       let confidence = [];
       let id = [];
       console.log("num_results = " + num_results);
-
+      console.log(data);
       // Extract the results
       let offset = 4;
       for (let i = 0; i < num_results; i++) {
@@ -412,40 +402,67 @@
         offset += 23;
       }
 
-      // overlay a circle at X, Y, and labels next to the dot on the image
-      let canvas = document.getElementById('ardurawrgb');
-      let ctx = canvas.getContext('2d');
-      ctx.font = "12px Arial";
-      ctx.fillStyle = "white";
-      for (let i = 0; i < num_results; i++) {
-        console.log("x = " + x[i] + ", y = " + y[i] + ", label = " + results[i]);
-        //draw a dot at x/y
-        ctx.beginPath();
-        
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 3;
+      // If no new results, display the old ones for 4 frames
+      // If there are new results, store them so we can display then when
+      // no results are received
+      if (num_results != 0) {
+        console.log("new results");
+        last_x_array = x;
+        last_y_array = y;
+        last_confidence_array = confidence;
+        last_label_array = results;
+        last_num_results = num_results;
+        num_repeated_frames = 0;
+      } else if (num_repeated_frames < 4) {
+        num_repeated_frames++;
+        console.log("repeated frames = " + num_repeated_frames + "array length = " + last_x_array.length);
+        if (last_x_array.length != 0) {
+          x = last_x_array;
+          y = last_y_array;
+          confidence = last_confidence_array;
+          results = last_label_array;
+        }
+      } else {
+        last_num_results = num_results;
+      }
 
-        ctx.arc(x[i], y[i], 5, 0, 2 * Math.PI);
-        ctx.stroke();
+      let canvas = document.getElementById('visionResult');
+      let vctx = canvas.getContext('2d');
+      vctx.clearRect(0, 0, canvas.width, canvas.height);
+      vctx.font = "12px Arial";
+      vctx.fillStyle = "white";
+      for (let i = 0; i < num_results; i++) {
+        // console.log("x = " + x[i] + ", y = " + y[i] + ", label = " + results[i]);
+        //draw a dot at x/y
+        vctx.beginPath();
+        
+        vctx.strokeStyle = "white";
+        vctx.lineWidth = 3;
+
+        vctx.arc(x[i]*3.33, y[i]*3.33, 5, 0, 2 * Math.PI);
+        vctx.stroke();
 
         // ctx.fillText(results[i], x[i], y[i]);
       }
-
-
-      // let canvas = document.getElementById('ardurawrgb');
-      // let ctx = canvas.getContext('2d');
-      // ctx.font = "12px Arial";
-      // ctx.fillStyle = "white";
       for (let i = 0; i < num_results; i++) {
         console.log("x = " + x[i] + ", y = " + y[i] + ", label = " + results[i]);
         // ctx.fillText(results[i], x[i], y[i]);
-      }    
+      }
+
+      // Display latency, FPS and Joules
+      let fps = 1000 / inference_latency;
+      fps = Math.round(fps * 100) / 100;
+      let joulesEstimate = 2180;
+      console.log("inference_latency = " + inference_latency);
+      console.log("fps = " + fps);
+      console.log("joules = " + joulesEstimate);
+      console.log("cpu = " + cpu_load);
+      updatePerformance(fps, joulesEstimate, cpu_load);
+
     }
 
-    // Show image sent from device over usb
+    // Show image in visionResult canvas
     function showImage(data) {
-        console.log("showing image, length = " + data.length);
-        // console.log(data);
         let img = document.getElementById('ardurawjpg');
         img.src = URL.createObjectURL(new Blob ([data], {type: 'image/jpeg'}));
     }
@@ -470,10 +487,6 @@
                 let g = ( g6 * 259 + 33 ) >> 6;
                 let b = ( b5 * 527 + 23 ) >> 6;
 
-
-                // let r = (rgb565 & 0xF800) >> 8;
-                // let g = (rgb565 & 0x07E0) >> 3;
-                // let b = (rgb565 & 0x001F) << 3;
                 imageData.data[i * 4] = r;
                 imageData.data[i * 4 + 1] = g;
                 imageData.data[i * 4 + 2] = b;
@@ -496,19 +509,12 @@
     // Receive a chunk of the image from the device
     function receiveChunk(data) {
         // console.log("received chunk");
-        // console.log(data);
-        // console.log(data.length);
-        // console.log(data.byteLength);
-        // console.log(data.buffer)
+ 
 
-        // console.log("chunk len " + data.byteLength + ", first byte = " + data.getUint8(0));
-        // if (data.getUint8(0) == 255) {
-          // console.log(data);
-        // }
-        // console.log("first byte = " + data.getUint8(0));
+
         // Check to see if this is metadata (first byte is 3)
         if (data.getUint8(0) == 3) {
-            console.log("metadata");
+            // console.log("metadata");
             decodeAndDisplayMetadata(data);
             return;
         }
