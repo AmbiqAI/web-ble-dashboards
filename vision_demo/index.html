@@ -73,6 +73,12 @@
       vertical-align: bottom;
     }
 
+    .short {
+      width: 423px;
+      height: 72px;
+      vertical-align: bottom;
+    }
+
     .tall {
       position: relative;
       width: 340px;
@@ -204,8 +210,18 @@
                 <div class="label">Device Performance<br></div>
                 <!-- <div id="SeLatency" class="doublegraph"></canvas> -->
                 <div id="fps" class="biglabel">FPS: 0<br></div>
-                <div id="joules" class="biglabel">uJ/inf: 0</div>
+                <div id="joules" class="biglabel">uJ/inf: 0<br></div>
                 <div id="cpu" class="biglabel">CPU %: 0</div>
+            </div>
+            <div class="short widget">
+                <!-- Add camera control sliders-->
+                <div class="label">Camera Control<br></div>
+                <input type="range" id="contrast" name="contrast" min="-3" max="3">
+                <div class="label">Contrast<br></div>
+                <input type="range" id="brightness" name="brightness" min="-3" max="3">
+                <div class="label">Brightness<br></div>
+                <input type="range" id="ev" name="ev" min="-3" max="3">
+                <div class="label">EV<br></div>
             </div>
         </div>
     </div>
@@ -463,6 +479,15 @@
 
     // Show image in visionResult canvas
     function showImage(data) {
+        // Send "ack" string as arraybuffer to device
+        // let ack = new Uint8Array(5);
+        // ack[0] = 0x00;
+        // ack[1] = 0x02;
+        // ack[2] = 0x43;
+        // ack[3] = 0x48;
+        // ack[4] = 0x0;
+        // console.log(ack);
+        // port.send(ack);
         let img = document.getElementById('ardurawjpg');
         img.src = URL.createObjectURL(new Blob ([data], {type: 'image/jpeg'}));
     }
@@ -550,6 +575,39 @@
         }
     } 
 
+    let contrastValue = 0;
+    let brightnessValue = 0;
+    let evValue = 0;
+
+    function sendCameraMessage() {
+        console.log("sending camera message");
+        let cameraMessage = new Uint8Array(5);
+        // Send header
+        cameraMessage[0] = 0x00;
+        cameraMessage[1] = 0x02;
+
+        // Send values
+        cameraMessage[2] = contrastValue;
+        cameraMessage[3] = brightnessValue;
+        cameraMessage[4] = evValue;
+        port.send(cameraMessage);
+    }
+
+    // When a slider is adjusted, send the new value to the device
+    document.getElementById('contrast').addEventListener('input', function (event) {
+        contrastValue = event.target.value;
+        sendCameraMessage();
+    });
+
+    document.getElementById('brightness').addEventListener('input', function (event) {
+        brightnessValue = event.target.value;
+        sendCameraMessage();
+    });    
+
+    document.getElementById('ev').addEventListener('input', function (event) {
+        evValue = event.target.value;
+        sendCameraMessage();
+    });
 
     async function usbConnect() {
         pairButton.style.backgroundColor = "grey";
