@@ -223,6 +223,10 @@
                 <input type="range" id="ev" name="ev" min="-3" max="3">
                 <div class="label">EV<br></div>
             </div>
+            <div class="double widget">
+              <div class="label">CPU Utilization</div>
+              <div id="Latency" class="doublegraph"></canvas>
+          </div>
         </div>
     </div>
 </body>
@@ -269,6 +273,8 @@
     // Rotating image indexes per label
     let imgNums = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 
+    initGraph('Latency', 'FOMO CPU Utilization', [0, 10]);
+
 
     // Vision Stuff
     // let canvas = document.getElementById('visionResult');
@@ -303,8 +309,8 @@
 
     function updatePerformance(fps, joulesEstimate, cpu) {
         document.getElementById('fps').innerHTML = 'FPS: ' + fps + '<br>';
-        document.getElementById('joules').innerHTML = 'uJ/inf: ' + joulesEstimate;
-        document.getElementById('cpu').innerHTML = 'CPU %: ' + cpu;
+        document.getElementById('joules').innerHTML = 'uJ/inf: ' + joulesEstimate+ '<br>';
+        document.getElementById('cpu').innerHTML = 'CPU %: ' + cpu+ '<br>';
 
     }
 
@@ -378,30 +384,21 @@
 
     // Decode and display metadata
     function decodeAndDisplayMetadata(data) {
-      // The metadata is in the following format:
-      //   typedef struct usb_metadata {
-      //     uint8_t descriptor; // 0/1/2 for first/middle/last chunk, 3 for metadata
-      //     uint8_t cpu_load;
-      //     uint8_t inference_latency;
-      //     uint8_t num_results;
-      //     char id[MAX_RESULTS][20]; // 20 chars max
-      //     uint8_t x[MAX_RESULTS];
-      //     uint8_t y[MAX_RESULTS];
-      //     uint8_t confidence[MAX_RESULTS];
-      // } usb_metadata_t;
-
       let cpu_load = data.getUint8(1);
       let inference_latency = data.getUint8(2);
-      let num_results = data.getUint8(3);
+      let microjoules_per_inference = data.getUint16(4, true);
+      let num_results = data.getUint8(6);
       let results = [];
       let x = [];
       let y = [];
+      let width = [];
+      let height = [];
       let confidence = [];
       let id = [];
-      console.log("num_results = " + num_results);
-      console.log(data);
+      // console.log("num_results = " + num_results);
+      // console.log(data);
       // Extract the results
-      let offset = 4;
+      let offset = 7;
       for (let i = 0; i < num_results; i++) {
         let id = "";
         for (let j = 0; j < 20; j++) {
@@ -414,8 +411,10 @@
         results.push(id);
         x.push(data.getUint8(offset + 20));
         y.push(data.getUint8(offset + 21));
-        confidence.push(data.getUint8(offset + 22));
-        offset += 23;
+        height.push(data.getUint8(offset + 22));
+        width.push(data.getUint8(offset + 23));
+        confidence.push(data.getUint8(offset + 24));
+        offset += 25;
       }
 
       // If no new results, display the old ones for 4 frames
@@ -429,6 +428,14 @@
         last_label_array = results;
         last_num_results = num_results;
         num_repeated_frames = 0;
+        for (let i = 0; i < num_results; i++) {
+          console.log("cpu = " + cpu_load + ", latency = " + inference_latency + ", joules = " + microjoules_per_inference + ", num_results = " + num_results);
+
+          console.log("x = " + x[i] + ", y = " + y[i] + ", label = " + results[i]);
+          console.log("width = " + width[i] + ", height = " + height[i]);
+          console.log("data = " + data);
+        // ctx.fillText(results[i], x[i], y[i]);
+      }
       } else if (num_repeated_frames < 4) {
         num_repeated_frames++;
         console.log("repeated frames = " + num_repeated_frames + "array length = " + last_x_array.length);
@@ -446,7 +453,18 @@
       let vctx = canvas.getContext('2d');
       vctx.clearRect(0, 0, canvas.width, canvas.height);
       vctx.font = "12px Arial";
-      vctx.fillStyle = "white";
+
+      // Set color based on confidence
+      if (confidence < 55) {
+        vctx.fillStyle = "red";
+      } else if (confidence < 75) {
+        vctx.fillStyle = "yellow";
+      } else {
+        vctx.fillStyle = "green";
+      }
+
+
+      // vctx.fillStyle = "white";
       for (let i = 0; i < num_results; i++) {
         // console.log("x = " + x[i] + ", y = " + y[i] + ", label = " + results[i]);
         //draw a dot at x/y
@@ -458,44 +476,71 @@
         vctx.arc(x[i]*3.33, y[i]*3.33, 5, 0, 2 * Math.PI);
         vctx.stroke();
 
-        // ctx.fillText(results[i], x[i], y[i]);
+        // Draw a bounding box
+        // vctx.beginPath();
+        // vctx.strokeStyle = "white";
+        // vctx.lineWidth = 3;
+        // vctx.rect(x[i]*3.33, y[i]*3.33, width[i]*3.33, height[i]*3.33);
+        // vctx.stroke();
+        let label = results[i];
+        label = label + "_" + i;
+        vctx.fillText(label, x[i]*3.33+15, y[i]*3.33);
       }
-      for (let i = 0; i < num_results; i++) {
-        console.log("x = " + x[i] + ", y = " + y[i] + ", label = " + results[i]);
-        // ctx.fillText(results[i], x[i], y[i]);
-      }
+ 
+      // Measure elapsed time since last inference
+      let elapsed = performance.now() - lastInferenceTime;
+      lastInferenceTime = performance.now();
+      let fps = 1000 / elapsed;
+      fps = Math.round(fps * 100) / 100;
 
       // Display latency, FPS and Joules
-      let fps = 1000 / inference_latency;
+      // let fps = 1000 / inference_latency;
       fps = Math.round(fps * 100) / 100;
-      let joulesEstimate = 2180;
-      console.log("inference_latency = " + inference_latency);
-      console.log("fps = " + fps);
-      console.log("joules = " + joulesEstimate);
-      console.log("cpu = " + cpu_load);
-      updatePerformance(fps, joulesEstimate, cpu_load);
+      let joulesEstimate = microjoules_per_inference;
+      let cpu_percent = (cpu_load + inference_latency)/10; // convert milleseconds to percentage
+      cpu_percent = Math.round(cpu_percent * 10) / 10;
+      // console.log("inference_latency = " + inference_latency);
+      // console.log("fps = " + fps);
+      // console.log("joules = " + joulesEstimate);
+      // console.log("cpu = " + cpu_load);
+      updatePerformance(fps, joulesEstimate, cpu_percent);
+
+      Plotly.newPlot('Latency', 
+        [{
+            labels: ['FOMO', 'JPG Decoe', 'Idle'],
+            values: [inference_latency, cpu_load, 1000-inference_latency-cpu_load],
+            marker: {
+                'colors': [
+                'rgb(0, 204, 0)',
+                'rgb(255, 255, 0)',
+                'rgb(0, 0, 195)'
+            ]
+            },
+            name: 'CPU Utilization',
+            type: 'pie',
+
+        }],{
+            plot_bgcolor: '#111111',
+            paper_bgcolor: '#111111',
+            margin: { l: 8, r: 8, b: 18, t: 18 }
+            // height: 400,
+            // width: 500
+        });
 
     }
 
     // Show image in visionResult canvas
     function showImage(data) {
-        // Send "ack" string as arraybuffer to device
-        // let ack = new Uint8Array(5);
-        // ack[0] = 0x00;
-        // ack[1] = 0x02;
-        // ack[2] = 0x43;
-        // ack[3] = 0x48;
-        // ack[4] = 0x0;
-        // console.log(ack);
-        // port.send(ack);
+        // console.log("showing image of length " + data.length);
+        // console.log(data);
         let img = document.getElementById('ardurawjpg');
         img.src = URL.createObjectURL(new Blob ([data], {type: 'image/jpeg'}));
     }
 
     // Draw RGB565 image on a canvas
     function draw565(data) {
-        // console.log("drawing image, length = " + data.length);
-        // console.log(data);
+        console.log("drawing image, length = " + data.length);
+        console.log(data);
         let canvas = document.getElementById('ardurawrgb');
         let ctx = canvas.getContext('2d');
         let imageData = ctx.createImageData(96, 96);
@@ -503,8 +548,9 @@
         let i = 0;
         for (let y = 0; y < 96; y++) {
             for (let x = 0; x < 96; x++) {
-                let rgb565 = data[source] | (data[source + 1] << 8);
-                source += 2;
+              let rgb565 = data[source] | (data[source + 1] << 8);
+              // let rgb565 = data[source + 1] | (data[source] << 8);
+              source += 2;
                 let r5 = (rgb565 & 0xF800) >> 11;
                 let g6 = (rgb565 & 0x07E0) >> 5;
                 let b5 = (rgb565 & 0x001F);
@@ -568,7 +614,7 @@
           if (data.getUint8(1) == 1) {
             showImage(imageBuffer); // 1 means 'jpg'
           } else {
-            draw565(imageBuffer);
+            // draw565(imageBuffer);
           }
           // draw565(imageBuffer);
           imageBuffer = new Uint8Array();
@@ -649,6 +695,20 @@
         // usbListen();
     }
 
+    function initGraph(id, title, yaxis) {
+        Plotly.newPlot('Latency', 
+        [{
+            labels: ['FOMO', 'JPG Decode', 'Idle'],
+            values: [5,5,5],
+            name: 'FOMO CPU Utilization (%)',
+            type: 'pie',
+
+        }],
+        {
+            height: 400,
+            width: 500
+        });     
+    }
 
   // Top middle information label
   function msg(m) {
