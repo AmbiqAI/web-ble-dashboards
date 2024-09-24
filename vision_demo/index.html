@@ -497,7 +497,10 @@
       // let fps = 1000 / inference_latency;
       fps = Math.round(fps * 100) / 100;
       let joulesEstimate = microjoules_per_inference;
-      let cpu_percent = (cpu_load + inference_latency)/10; // convert milleseconds to percentage
+      let cpu_percent = (cpu_load + inference_latency)*fps/10; // convert milleseconds to percentage
+      if (cpu_percent > 100) {
+        cpu_percent = 100;
+      }
       cpu_percent = Math.round(cpu_percent * 10) / 10;
       // console.log("inference_latency = " + inference_latency);
       // console.log("fps = " + fps);
