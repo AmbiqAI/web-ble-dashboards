@@ -497,7 +497,7 @@
       // let fps = 1000 / inference_latency;
       fps = Math.round(fps * 100) / 100;
       let joulesEstimate = microjoules_per_inference;
-      let cpu_percent = (cpu_load + inference_latency)*fps/10; // convert milleseconds to percentage
+      let cpu_percent = (cpu_load + inference_latency + 50)*fps/10; // convert milleseconds to percentage
       if (cpu_percent > 100) {
         cpu_percent = 100;
       }
@@ -507,11 +507,13 @@
       // console.log("joules = " + joulesEstimate);
       // console.log("cpu = " + cpu_load);
       updatePerformance(fps, joulesEstimate, cpu_percent);
-
+      let inf_per_frame = inference_latency * fps;
+      let cpu_per_frame = cpu_load * fps;
+      let idle_per_frame = 950 - inf_per_frame - cpu_per_frame;
       Plotly.newPlot('Latency', 
         [{
-            labels: ['FOMO', 'JPG Decoe', 'Idle'],
-            values: [inference_latency, cpu_load, 1000-inference_latency-cpu_load],
+            labels: ['FOMO', 'JPG Decode', 'Idle'],
+            values: [inf_per_frame, cpu_per_frame, idle_per_frame],
             marker: {
                 'colors': [
                 'rgb(0, 204, 0)',
