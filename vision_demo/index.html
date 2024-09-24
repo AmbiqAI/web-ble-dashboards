@@ -649,9 +649,6 @@
 
     function sendCameraMessage() {
         console.log("sending camera message");
-
-        console.log("product id = " + productId);
-        console.log("vendor id = " + vendorId);
         let cameraMessage = new Uint8Array(5);
         // Send header
         cameraMessage[0] = 0x00;
