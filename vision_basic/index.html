@@ -2,7 +2,7 @@
 <html>
 
 <head>
-  <title>FOMO on Apollo Devicess</title>
+  <title>Arducam on Apollo Devicess</title>
   <link href='https://fonts.googleapis.com/css?family=Roboto Mono' rel='stylesheet'>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
@@ -82,7 +82,7 @@
     .tall {
       position: relative;
       width: 340px;
-      height: 440px;
+      height: 340px;
       vertical-align: bottom;
     }
     .spectrograph {
@@ -91,11 +91,8 @@
     }
 
     .arducam {
-      position: relative;
-      top: 0;
-      left: 0;
-      height: 96px;
-      width: 96px;
+      height: "96";
+      width: "96";
     }
 
     .hud {
@@ -203,28 +200,23 @@
         </div>
 
         <div class="container">
+            <div class="double widget">
+              <canvas id="ardurawrgb" class="arducam"></canvas>
+            </div>
 
             <div class="tall widget">
                 <!-- <div class="label">Image<br></div> -->
                 <!-- <canvas id="ardurawrgb" class="arducam"></canvas> -->
                 <canvas id="visionResult" width="320" height="320" class="hud"></canvas>
-                <img class="img" id="ardurawjpg" width="320" src="https://ambiq.com/wp-content/uploads/2022/04/Scotty-strong-mob-1.png"/>
-                <canvas id="ardurawrgb" width="96" height="96" class="arducam"></canvas>
+                <img class="img" id="ardurawjpg" width="320" src="images/bird/0001.png"/>
             </div>
             <div class="double widget">
                 <div class="label">Device Performance<br></div>
                 <!-- <div id="SeLatency" class="doublegraph"></canvas> -->
-                  <div id="fps" class="biglabel">FPS: 0<br></div>
-                  <div id="joules" class="biglabel">uJ/inf: 0<br></div>
-                  <!-- <dif id="ifs" class="biglabel">Inf Lat: 0<br></div> -->
-                <div id="cpu" class="biglabel">Inf ms: 0</div>
+                <div id="fps" class="biglabel">FPS: 0<br></div>
+                <div id="joules" class="biglabel">uJ/inf: 0<br></div>
+                <div id="cpu" class="biglabel">CPU %: 0</div>
             </div>
-
-            <div class="double widget">
-              <div class="label">CPU Utilization</div>
-              <div id="Latency" class="doublegraph"></div>
-            </div>
-
             <div class="short widget">
                 <!-- Add camera control sliders-->
                 <div class="label">Camera Control<br></div>
@@ -234,11 +226,11 @@
                 <div class="label">Brightness<br></div>
                 <input type="range" id="ev" name="ev" min="-3" max="3">
                 <div class="label">EV<br></div>
-                <!-- Add pretty-mode toggle -->
-                <input type="checkbox" id="prettyMode" name="prettyMode">
-                <div class="label">Pretty Mode<br></div>
             </div>
-
+            <div class="double widget">
+              <div class="label">CPU Utilization</div>
+              <div id="Latency" class="doublegraph"></canvas>
+          </div>
         </div>
     </div>
 </body>
@@ -325,7 +317,8 @@
     function updatePerformance(fps, joulesEstimate, cpu) {
         document.getElementById('fps').innerHTML = 'FPS: ' + fps + '<br>';
         document.getElementById('joules').innerHTML = 'uJ/inf: ' + joulesEstimate+ '<br>';
-        document.getElementById('cpu').innerHTML = 'Inf ms: ' + cpu+ '<br>';
+        document.getElementById('cpu').innerHTML = 'CPU %: ' + cpu+ '<br>';
+
     }
 
     let lastInferenceTime = performance.now();
@@ -395,9 +388,6 @@
     let last_confidence_array = [];
     let last_label_array = [];
     let num_repeated_frames = 0;
-
-    let last_fps = 5;
-    let last_cpuUtilization = 90;
 
     // Decode and display metadata
     function decodeAndDisplayMetadata(data) {
@@ -508,14 +498,11 @@
       let elapsed = performance.now() - lastInferenceTime;
       lastInferenceTime = performance.now();
       let fps = 1000 / elapsed;
-      let avg_fps = (fps + last_fps) / 2;
-      last_fps = fps;
-      fps = Math.round(avg_fps * 100) / 100;
+      fps = Math.round(fps * 100) / 100;
 
       // Display latency, FPS and Joules
       // let fps = 1000 / inference_latency;
       fps = Math.round(fps * 100) / 100;
-
       let joulesEstimate = microjoules_per_inference;
 
       if (serialNumber == "123456") {
@@ -532,23 +519,12 @@
       if (cpu_percent > 100) {
         cpu_percent = 100;
       }
-
-      let avg_cpu_percent = (cpu_percent + last_cpuUtilization) / 2;
-      last_cpuUtilization = cpu_percent;
-
-      cpu_percent = Math.round(avg_cpu_percent * 10) / 10;
+      cpu_percent = Math.round(cpu_percent * 10) / 10;
       // console.log("inference_latency = " + inference_latency);
       // console.log("fps = " + fps);
       // console.log("joules = " + joulesEstimate);
       // console.log("cpu = " + cpu_load);
-
-      // Smooth out the values by averageing the last 5
-      // Push in values to the arra
-    
-      // fps = (fps + last_fps) / 2;
-      // joulesEstimate = (joulesEstimate + last_joulesEstimate) / 2;
-
-      updatePerformance(fps, joulesEstimate, inference_latency);
+      updatePerformance(fps, joulesEstimate, cpu_percent);
 
       let inf_per_frame = inference_latency * fps;
       let cpu_per_frame = cpu_load * fps;
@@ -568,7 +544,6 @@
             },
             name: 'CPU Utilization',
             type: 'pie',
-            sort: false,
 
         }],{
             plot_bgcolor: '#111111',
@@ -591,7 +566,7 @@
     // Draw RGB565 image on a canvas
     function draw565(data) {
         console.log("drawing image, length = " + data.length);
-        // console.log(data);
+        console.log(data);
         let canvas = document.getElementById('ardurawrgb');
         let ctx = canvas.getContext('2d');
         let imageData = ctx.createImageData(96, 96);
@@ -613,6 +588,11 @@
                 imageData.data[i * 4 + 1] = g;
                 imageData.data[i * 4 + 2] = b;
                 imageData.data[i * 4 + 3] = 255;
+                // if (i < 10) {
+                //     console.log("i=" + i + " r = " + r + ", g = " + g + ", b = " + b);
+                //     console.log("rgb565 = " + rgb565.toString(16));
+                //     console.log("rgb888 = " + r.toString(16) + g.toString(16) + b.toString(16));
+                // }
                 i += 1;
             }
         }
@@ -660,7 +640,7 @@
           if (data.getUint8(1) == 1) {
             showImage(imageBuffer); // 1 means 'jpg'
           } else {
-            draw565(imageBuffer);
+            // draw565(imageBuffer);
           }
           // draw565(imageBuffer);
           imageBuffer = new Uint8Array();
@@ -670,11 +650,10 @@
     let contrastValue = 0;
     let brightnessValue = 0;
     let evValue = 0;
-    let prettyMode = 0;
 
     function sendCameraMessage() {
         console.log("sending camera message");
-        let cameraMessage = new Uint8Array(6);
+        let cameraMessage = new Uint8Array(5);
         // Send header
         cameraMessage[0] = 0x00;
         cameraMessage[1] = 0x02;
@@ -683,7 +662,6 @@
         cameraMessage[2] = contrastValue;
         cameraMessage[3] = brightnessValue;
         cameraMessage[4] = evValue;
-        cameraMessage[5] = prettyMode;
         port.send(cameraMessage);
     }
 
@@ -700,11 +678,6 @@
 
     document.getElementById('ev').addEventListener('input', function (event) {
         evValue = event.target.value;
-        sendCameraMessage();
-    });
-
-    document.getElementById('prettyMode').addEventListener('input', function (event) {
-        prettyMode = event.target.checked;
         sendCameraMessage();
     });
 
