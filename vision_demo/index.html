@@ -235,7 +235,7 @@
                 <div class="label">Brightness<br></div>
                 <input type="range" id="ev" name="ev" min="-3" max="3">
                 <div class="label">EV<br></div>
-                <!-- Add pretty-mode toggle -->
+                <!-- Add pretty-mode toggle default to set-->
                 <input type="checkbox" id="prettyMode" name="prettyMode">
                 <div class="label">Pretty Mode<br></div>
             </div>
@@ -406,6 +406,9 @@
       let inference_latency = data.getUint8(2);
       let microjoules_per_inference = data.getUint16(4, true);
       let num_results = data.getUint8(6);
+      if (num_results > 4) {
+        return;
+      }
       let results = [];
       let x = [];
       let y = [];
@@ -413,8 +416,8 @@
       let height = [];
       let confidence = [];
       let id = [];
-      // console.log("num_results = " + num_results);
-      // console.log(data);
+      console.log("num_results = " + num_results);
+      console.log(data);
       // Extract the results
       let offset = 7;
       for (let i = 0; i < num_results; i++) {
