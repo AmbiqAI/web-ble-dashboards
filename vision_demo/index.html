@@ -35,7 +35,6 @@
       margin: 8px 18px;
       height: 25px;
       width: 100px;
-      border-radius: 10%;
       outline: none;
 
       border-radius: 20px;
@@ -137,7 +136,6 @@
 
     #snackbar {
       height: 23px;
-      display: block;
       visibility: visible;
       text-align: center;
       background-color: #374146;
@@ -293,14 +291,6 @@
 
 
     // Vision Stuff
-    // let canvas = document.getElementById('visionResult');
-    // let vctx = canvas.getContext('2d');
-    // let viz = new Image(320,320);
-    // // viz.src = "https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg";
-    // vctx.drawImage(viz, 0,0, 320, 320);
-    // console.log(viz);
-    // viz.src = 'images/bird/0002.png';
-    // vctx.drawImage(viz, 0,0, 320, 320);
 
     function addImage(newImageId, newImageLabel) {
         // Adds an image to the top of icresult and scrolls the existing images down
@@ -630,6 +620,61 @@
         ctx.putImageData(imageData, 0, 0);
     }
 
+    function drawBig565(data) {
+      // Create an offscreen canvas for the original 96x96 image
+      let offCanvas = document.createElement('canvas');
+      offCanvas.width = 96;
+      offCanvas.height = 96;
+      let offCtx = offCanvas.getContext('2d');
+      
+      let imageData = offCtx.createImageData(96, 96);
+      let source = 0;
+      
+      // Decode the RGB565 data into RGBA pixels
+      for (let y = 0; y < 96; y++) {
+        for (let x = 0; x < 96; x++) {
+          let rgb565 = data[source] | (data[source + 1] << 8);
+          source += 2;
+          let r5 = (rgb565 & 0xF800) >> 11;
+          let g6 = (rgb565 & 0x07E0) >> 5;
+          let b5 = (rgb565 & 0x001F);
+          let r = (r5 * 527 + 23) >> 6;
+          let g = (g6 * 259 + 33) >> 6;
+          let b = (b5 * 527 + 23) >> 6;
+          
+          let i = y * 96 + x;
+          imageData.data[i * 4] = r;
+          imageData.data[i * 4 + 1] = g;
+          imageData.data[i * 4 + 2] = b;
+          imageData.data[i * 4 + 3] = 255;
+        }
+      }
+      
+      // Put the decoded image data onto the offscreen canvas
+      offCtx.putImageData(imageData, 0, 0);
+      
+      // Create a second canvas for the scaled 320x320 image
+      let bigCanvas = document.createElement('canvas');
+      bigCanvas.width = 320;
+      bigCanvas.height = 320;
+      let bigCtx = bigCanvas.getContext('2d');
+      
+      // Enable high quality interpolation
+      bigCtx.imageSmoothingEnabled = true;
+      bigCtx.imageSmoothingQuality = 'high';
+      
+      // Draw the offscreen canvas onto the big canvas with scaling
+      bigCtx.drawImage(offCanvas, 0, 0, offCanvas.width, offCanvas.height, 0, 0, bigCanvas.width, bigCanvas.height);
+      
+      // Convert the big canvas to a data URL
+      let imgURL = bigCanvas.toDataURL("image/png");
+      
+      // Set the image URL to the same element used in showImage
+      let img = document.getElementById('ardurawjpg');
+      img.src = imgURL;
+    }
+
+
     let imageBuffer = new Uint8Array();
     let imageOffset = 0;
 
@@ -670,7 +715,8 @@
           if (data.getUint8(1) == 1) {
             showImage(imageBuffer); // 1 means 'jpg'
           } else {
-            draw565(imageBuffer);
+            drawBig565(imageBuffer);
+            // draw565(imageBuffer);
           }
           // draw565(imageBuffer);
           imageBuffer = new Uint8Array();
