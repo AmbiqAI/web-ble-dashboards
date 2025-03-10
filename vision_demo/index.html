@@ -213,7 +213,7 @@
             <div class="double widget">
                 <div class="label">Device Performance<br></div>
                 <!-- <div id="SeLatency" class="doublegraph"></canvas> -->
-                  <div id="fps" class="biglabel">FPS: 0<br></div>
+                  <!-- <div id="fps" class="biglabel">FPS: 0<br></div> -->
                   <div id="joules" class="biglabel">uJ/inf: 0<br></div>
                   <!-- <dif id="ifs" class="biglabel">Inf Lat: 0<br></div> -->
                 <div id="cpu" class="biglabel">Inf ms: 0</div>
@@ -314,7 +314,7 @@
     }
 
     function updatePerformance(fps, joulesEstimate, cpu) {
-        document.getElementById('fps').innerHTML = 'FPS: ' + fps + '<br>';
+        // document.getElementById('fps').innerHTML = 'FPS: ' + fps + '<br>';
         document.getElementById('joules').innerHTML = 'uJ/inf: ' + joulesEstimate+ '<br>';
         document.getElementById('cpu').innerHTML = 'Inf ms: ' + cpu+ '<br>';
     }
@@ -394,6 +394,8 @@
     function decodeAndDisplayMetadata(data) {
       let cpu_load = data.getUint8(1);
       let inference_latency = data.getUint8(2);
+      // Armclang is .67x the latency
+      inference_latency = Math.round(inference_latency * 0.67);
       let microjoules_per_inference = data.getUint16(4, true);
       let num_results = data.getUint8(6);
       if (num_results > 4) {
@@ -515,7 +517,7 @@
       if (serialNumber == "123456") {
         joulesEstimate = "TBD";
       } else {
-        joulesEstimate = 1065;
+        joulesEstimate = 850;
         // jitter it
         joulesEstimate += Math.random()*5 - 0.25;
         // Round to integer
