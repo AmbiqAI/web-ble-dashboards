@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>NNSE over USB - Autodeploy</title>
+  <link href='https://fonts.googleapis.com/css?family=Roboto Mono' rel='stylesheet'>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <!-- <script src="https://cdn.jsdelivr.net/npm/flatbuffers@23.5.26/lib/flatbuffers.min.js"></script> -->
+
+
+  <style>
+     * {
+      font-family: 'Roboto Mono', sans-serif;
+    }
+
+    body {
+      color: white;
+      background: #000000;
+      font-size: 14px;
+    }
+    .container {
+      width: 960px;
+      margin: 30px auto;
+    }
+
+    #pairButton {
+      background-color: #d8f41d;
+      border: none;
+      color: black;
+      padding: 1px;
+      text-align: center;
+      text-decoration: none;
+
+      margin: 8px 18px;
+      height: 25px;
+      width: 100px;
+      border-radius: 10%;
+      outline: none;
+
+      border-radius: 20px;
+      grid-column: 1;
+
+      cursor: pointer;
+    }
+
+    .widget {
+      background-color: #111111;
+      border: 1px solid #000000;
+      border-radius: 0px;
+      padding: 12px;
+      color: #DAE3E3;
+      padding-bottom: 16px;
+    }
+    .doublegraph {
+      width: 400px;
+      height: 220px;
+      vertical-align: bottom;
+    }
+    .double {
+      width: 423px;
+      height: 226px;
+      vertical-align: bottom;
+    }
+    .spectrograph {
+      height: "512";
+      width: "700";
+    }
+    .status {
+      margin-top: 1%;
+      width: 885px;
+      height: 42px;
+      color: white;
+      display: grid;
+      grid-template-columns: 15% 70% 15%;
+      margin-left: auto;
+      margin-right: auto;
+      margin-bottom: 10px;
+    }
+
+    #bluetooth {
+      font-size: 16px;
+      height: 50%;
+      margin: auto;
+    }
+
+    .statusBar {
+      height: 100%;
+      grid-column: 2;
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    .audioBar {
+      height: 100%;
+      grid-column: 1;
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    #snackbar {
+      height: 23px;
+      display: block;
+      visibility: visible;
+      text-align: center;
+      background-color: #374146;
+      border-radius: 3px;
+      padding: 4px 13px 4px 13px;
+      margin: 16px auto 7px auto;
+      width: fit-content;
+      max-width: 885px;
+    }
+
+    #snackbar.show {
+      -webkit-animation: fadein 0.5s, 0.1s;
+      animation: fadein 0.5s, 0.1s;
+    }
+
+
+    @-webkit-keyframes fadein {
+      from {
+        visibility: hidden;
+        opacity: 0;
+      }
+      to {
+        visibility: visible;
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadein {
+      from {
+        visibility: hidden;
+        opacity: 0;
+      }
+      to {
+        visibility: visible;
+        opacity: 1;
+      }
+    }
+    .label {
+      height: 15px;
+      display: inline;
+      font-size: 12px;
+
+    }
+
+    /* Autodeploy specific styles */
+    .autodeploy-section {
+      width: 885px;
+      margin: 10px auto;
+      background-color: #111111;
+      border: 1px solid #000000;
+      border-radius: 0px;
+      padding: 12px;
+      color: #DAE3E3;
+      padding-bottom: 16px;
+    }
+
+    .config-panel {
+      /* All visual styles moved to autodeploy-section */
+    }
+
+    .config-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 8px 0;
+    }
+
+    .config-label {
+      font-size: 12px;
+      color: #DAE3E3;
+      min-width: 150px;
+    }
+
+    .config-input {
+      background-color: #222;
+      border: 1px solid #444;
+      color: white;
+      padding: 5px;
+      border-radius: 3px;
+      font-size: 12px;
+      width: 120px;
+    }
+
+    .config-select {
+      background-color: #222;
+      border: 1px solid #444;
+      color: white;
+      padding: 5px;
+      border-radius: 3px;
+      font-size: 12px;
+      width: 120px;
+    }
+
+    .action-button {
+      background-color: #d8f41d;
+      border: none;
+      color: black;
+      padding: 8px 15px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 12px;
+      margin: 5px;
+    }
+
+    .action-button:disabled {
+      background-color: #666;
+      color: #999;
+      cursor: not-allowed;
+    }
+
+    .progress-container {
+      margin: 10px 0;
+      display: none;
+    }
+
+    .progress-bar {
+      background-color: #374146;
+      height: 20px;
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 5px 0;
+    }
+
+    .progress-fill {
+      background-color: #d8f41d;
+      height: 100%;
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    .stats-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 11px;
+    }
+
+    .stats-table th,
+    .stats-table td {
+      border: 1px solid #333;
+      padding: 5px;
+      text-align: left;
+    }
+
+    .stats-table th {
+      background-color: #222;
+      color: #d8f41d;
+    }
+
+    .tab-container {
+      display: flex;
+      margin-bottom: 10px;
+    }
+
+    .tab {
+      background-color: #222;
+      border: 1px solid #444;
+      color: white;
+      padding: 8px 15px;
+      cursor: pointer;
+      border-radius: 5px 5px 0 0;
+      margin-right: 2px;
+    }
+
+    .tab.active {
+      background-color: #111111;
+      border-bottom: 1px solid #111111;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+    <div class="container">
+        <div id="snackbar"></div>
+        
+        <!-- Connection Status -->
+        <div class="status widget">
+            <button id="pairButton">CONNECT</button>
+            <div class="label statusBar" id="bluetooth">Click the connect button to connect your device</div>
+        </div>
+
+        <!-- Model Autodeploy Section -->
+        <div class="autodeploy-section">
+            <div class="config-panel">
+                <!-- <div class="label" style="font-size: 16px; margin-bottom: 15px;">Model Autodeploy</div> -->
+
+                <div class="tab-container">
+                    <div class="tab active" onclick="switchTab('upload')">Model Upload</div>
+                    <div class="tab" onclick="switchTab('config')">Configuration</div>
+                    <div class="tab" onclick="switchTab('validation')">Validation</div>
+                    <div class="tab" onclick="switchTab('stats')">Performance Stats</div>
+                </div>
+
+                <!-- Upload Tab -->
+                <div id="upload-tab" class="tab-content active">
+                    <div class="config-row">
+                        <div class="config-label">Model File:</div>
+                        <input type="file" id="modelFile" accept=".tflite" style="display: none;">
+                        <button id="selectModelButton" class="action-button">Select Model</button>
+                        <button id="uploadModelButton" class="action-button" disabled>Upload Model</button>
+                        <button id="testPacketButton" class="action-button">Test Packet</button>
+                        <button id="pingButton" class="action-button">Ping Test</button>
+                    </div>
+                    <div id="uploadProgress" class="progress-container">
+                        <div class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <div id="progressText" style="text-align: center; font-size: 12px;">0%</div>
+                    </div>
+                </div>
+
+                <!-- Configuration Tab -->
+                <div id="config-tab" class="tab-content">
+                    <div class="config-row">
+                        <div class="config-label">Model Location:</div>
+                        <select id="modelLocation" class="config-select">
+                            <option value="0">TCM</option>
+                            <option value="1">SRAM</option>
+                            <!-- <option value="2" selected>PSRAM</option> -->
+                        </select>
+                    </div>
+                    <div class="config-row">
+                        <div class="config-label">Arena Location:</div>
+                        <select id="arenaLocation" class="config-select">
+                            <option value="0" selected>TCM</option>
+                            <option value="1">SRAM</option>
+                            <!-- <option value="2">PSRAM</option> -->
+                        </select>
+                    </div>
+                    <div class="config-row">
+                        <div class="config-label">Max Arena Size (KB):</div>
+                        <input type="number" id="maxArenaSize" class="config-input" value="1024" min="1" max="8192">
+                    </div>
+                    <div class="config-row">
+                        <div class="config-label">Profile Enable:</div>
+                        <input type="checkbox" id="profileEnable" checked>
+                    </div>
+                    <div class="config-row">
+                        <div class="config-label">Profile Warmup:</div>
+                        <input type="number" id="profileWarmup" class="config-input" value="1" min="0" max="100">
+                    </div>
+                    <div class="config-row">
+                        <div class="config-label">Full PMU Capture:</div>
+                        <input type="checkbox" id="fullPmuCapture">
+                    </div>
+                    <div class="config-row">
+                        <div class="config-label">Validation Runs:</div>
+                        <input type="number" id="validationRuns" class="config-input" value="10" min="1" max="1000">
+                    </div>
+                    <div class="config-row">
+                        <div class="config-label">Random Data:</div>
+                        <input type="checkbox" id="randomData" checked>
+                    </div>
+                    <div class="config-row">
+                        <button id="configureModelButton" class="action-button">Configure Model</button>
+                        <button id="getStatsButton" class="action-button">Get Performance Stats</button>
+                    </div>
+                </div>
+
+                <!-- Validation Tab -->
+                <div id="validation-tab" class="tab-content">
+                    <div class="config-row">
+                        <div class="config-label">Validation Status:</div>
+                        <div id="validationStatus" style="color: #999;">Not started</div>
+                    </div>
+                    <div class="config-row">
+                        <button id="startValidationButton" class="action-button">Start Validation</button>
+                        <button id="stopValidationButton" class="action-button" disabled>Stop Validation</button>
+                    </div>
+                    <div id="validationResults" style="margin-top: 10px; display: none;">
+                        <div class="label" style="font-size: 14px; margin-bottom: 10px;">Validation Results:</div>
+                        <div id="validationOutput" style="background-color: #222; padding: 10px; border-radius: 3px; font-size: 11px; max-height: 200px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+
+                <!-- Performance Stats Tab -->
+                <div id="stats-tab" class="tab-content">
+                    <div class="config-row">
+                        <button id="refreshStatsButton" class="action-button">Refresh Stats</button>
+                        <button id="exportStatsButton" class="action-button">Export CSV</button>
+                    </div>
+                    <div id="statsContainer" style="margin-top: 10px;">
+                        <div id="statsSummary" style="background-color: #222; padding: 10px; border-radius: 3px; margin-bottom: 10px; display: none;">
+                            <div class="label" style="font-size: 14px; margin-bottom: 10px;">Performance Summary:</div>
+                            <div id="summaryContent" style="font-size: 11px;"></div>
+                        </div>
+                        <div id="statsTable" style="display: none;">
+                            <table class="stats-table" id="performanceTable">
+                                <thead>
+                                    <tr>
+                                        <th>Layer</th>
+                                        <th>Tag</th>
+                                        <th>Time (μs)</th>
+                                        <th>MACs</th>
+                                        <th>Cycles</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="statsTableBody">
+                                </tbody>
+                            </table>
+            </div>
+            </div>
+            </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+<script src="crc32.js"></script>
+<script src="serial.js"></script>
+
+<script>
+    // UI Elements
+    const BLEstatus = document.getElementById('bluetooth');
+    const pairButton = document.getElementById('pairButton');
+
+    // Autodeploy UI Elements
+    const selectModelButton = document.getElementById('selectModelButton');
+    const uploadModelButton = document.getElementById('uploadModelButton');
+    const modelFileInput = document.getElementById('modelFile');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+
+    // Configuration elements
+    const configureModelButton = document.getElementById('configureModelButton');
+    const getStatsButton = document.getElementById('getStatsButton');
+    const startValidationButton = document.getElementById('startValidationButton');
+    const stopValidationButton = document.getElementById('stopValidationButton');
+    const refreshStatsButton = document.getElementById('refreshStatsButton');
+    const exportStatsButton = document.getElementById('exportStatsButton');
+    const testPacketButton = document.getElementById('testPacketButton');
+    const pingButton = document.getElementById('pingButton');
+
+    // Global variables
+    let currentModelData = null;
+    let currentModelMetadata = null;
+    let validationRunning = false;
+    let performanceStats = null;
+
+    // Tab switching
+    function switchTab(tabName) {
+        // Hide all tab contents
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+
+        // Show selected tab
+        document.getElementById(tabName + '-tab').classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    // Model file selection
+    selectModelButton.addEventListener('click', () => {
+        modelFileInput.click();
+    });
+
+    modelFileInput.addEventListener('change', async () => {
+        if (modelFileInput.files.length > 0) {
+            const file = modelFileInput.files[0];
+            currentModelData = file;
+            uploadModelButton.disabled = false;
+            snack('Model loaded: ' + file.name, 0);
+        } else {
+            uploadModelButton.disabled = true;
+        }
+    });
+
+    // Model upload
+    uploadModelButton.addEventListener('click', async () => {
+        if (!port) {
+            snack('Please connect to device first', 1);
+            return;
+        }
+        if (!currentModelData) {
+            snack('Please select a model file first', 1);
+            return;
+        }
+        try {
+            uploadModelButton.disabled = true;
+            selectModelButton.disabled = true;
+            uploadProgress.style.display = 'block';
+            progressFill.style.width = '0%';
+            progressText.textContent = '0%';
+            await port.uploadModel(
+                currentModelData,
+                (progress) => {
+                    progressFill.style.width = `${progress}%`;
+                    progressText.textContent = `${Math.round(progress)}%`;
+                },
+                (err) => {
+                    snack('Upload failed: ' + err, 1);
+                },
+                () => {
+                    snack('Model upload complete!', 0);
+                }
+            );
+        } catch (error) {
+            snack('Upload failed: ' + error.message, 1);
+        } finally {
+            uploadModelButton.disabled = false;
+            selectModelButton.disabled = false;
+            uploadProgress.style.display = 'none';
+            progressFill.style.width = '0%';
+            progressText.textContent = '0%';
+        }
+    });
+
+    // Test packet
+    testPacketButton.addEventListener('click', async () => {
+        if (!port) {
+            snack('Please connect to device first', 1);
+            return;
+        }
+        
+        try {
+            console.log('Starting test packet...');
+            
+            // Create a simple test packet with 7-byte header + 4 bytes of data
+            const testData = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
+            const calculatedCrc = calcCrc32(0xFFFFFFFF, testData.length, testData);
+            
+            const header = new Uint8Array(7);
+            const view = new DataView(header.buffer);
+            view.setUint32(0, calculatedCrc, true); // CRC32 LE
+            view.setUint8(4, 1); // chunk command: 1=MODEL_CHUNK
+            view.setUint8(5, 0); // chunk_id = 0
+            view.setUint8(6, 1); // total_chunks = 1
+            
+            const packet = new Uint8Array(header.length + testData.length);
+            packet.set(header, 0);
+            packet.set(testData, header.length);
+            
+            // Add 2-byte frame header for raw data (RX_RAW_DATA = 2)
+            const frameHeader = new Uint8Array([0x00, 0x02]); // RX_RAW_DATA = 2, big-endian (high byte first)
+            const fullPacket = new Uint8Array(frameHeader.length + packet.length);
+            fullPacket.set(frameHeader, 0);
+            fullPacket.set(packet, frameHeader.length);
+            
+            console.log('Sending test packet with frame header:', Array.from(fullPacket).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+            console.log('Packet length:', fullPacket.length, 'bytes');
+            
+            await port.send(fullPacket);
+            console.log('Test packet sent successfully');
+            snack('Test packet sent!', 0);
+            
+            // Wait a moment and check for any responses
+            setTimeout(() => {
+                console.log('Checking for responses after test packet...');
+            }, 1000);
+            
+        } catch (error) {
+            console.error('Test packet failed:', error);
+            snack('Test packet failed: ' + error.message, 1);
+        }
+    });
+
+    // Ping test
+    pingButton.addEventListener('click', async () => {
+        if (!port) {
+            snack('Please connect to device first', 1);
+            return;
+        }
+        
+        try {
+            console.log('Starting ping test...');
+            
+            // Send a simple ping message
+            const pingData = new Uint8Array([0x50, 0x49, 0x4E, 0x47]); // "PING"
+            
+            // Add 2-byte frame header for raw data (RX_RAW_DATA = 2)
+            const frameHeader = new Uint8Array([0x00, 0x02]); // RX_RAW_DATA = 2, big-endian (high byte first)
+            const fullPacket = new Uint8Array(frameHeader.length + pingData.length);
+            fullPacket.set(frameHeader, 0);
+            fullPacket.set(pingData, frameHeader.length);
+            
+            console.log('Sending ping with frame header:', Array.from(fullPacket).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+            
+            await port.send(fullPacket);
+            console.log('Ping sent successfully');
+            snack('Ping sent!', 0);
+            
+            // Wait a moment and check for any responses
+            setTimeout(() => {
+                console.log('Checking for responses after ping...');
+            }, 1000);
+            
+        } catch (error) {
+            console.error('Ping failed:', error);
+            snack('Ping failed: ' + error.message, 1);
+        }
+    });
+
+    // Configure model
+    configureModelButton.addEventListener('click', configureModel);
+
+    async function configureModel() {
+        if (!port) {
+            snack('Please connect to device first', 1);
+            return;
+        }
+
+        try {
+            const config = {
+                prof_enable: document.getElementById('profileEnable').checked ? 1 : 0,
+                total_input_tensor_bytes: currentModelMetadata?.total_input_tensor_bytes || 1024,
+                total_output_tensor_bytes: currentModelMetadata?.total_output_tensor_bytes || 1024,
+                profile_warmup: parseInt(document.getElementById('profileWarmup').value),
+                num_inputs: currentModelMetadata?.num_inputs || 1,
+                num_outputs: currentModelMetadata?.num_outputs || 1,
+                full_pmu_capture: document.getElementById('fullPmuCapture').checked ? 1 : 0,
+                input_tensor_byte_lengths: currentModelMetadata?.input_tensor_byte_lengths || [1024],
+                output_tensor_byte_lengths: currentModelMetadata?.output_tensor_byte_lengths || [1024]
+            };
+
+            await port.sendModelConfig(config);
+            snack('Model configured successfully', 0);
+        } catch (error) {
+            snack('Configuration failed: ' + error.message, 1);
+        }
+    }
+
+    // Get performance stats
+    getStatsButton.addEventListener('click', getPerformanceStats);
+    refreshStatsButton.addEventListener('click', getPerformanceStats);
+
+    async function getPerformanceStats() {
+        if (!port) {
+            snack('Please connect to device first', 1);
+            return;
+        }
+
+        try {
+            performanceStats = await port.getModelStats();
+            displayPerformanceStats(performanceStats);
+            snack('Performance stats received', 0);
+        } catch (error) {
+            snack('Failed to get stats: ' + error.message, 1);
+        }
+    }
+
+    function displayPerformanceStats(stats) {
+        // Display summary
+        const summaryContent = document.getElementById('summaryContent');
+        summaryContent.innerHTML = `
+            <div>Arena Size: ${stats.computed_arena_size} bytes</div>
+            <div>Stat Buffer Size: ${stats.computed_stat_buffer_size} bytes</div>
+            <div>Captured Events: ${stats.captured_events}</div>
+            <div>PMU Events per Layer: ${stats.pmu_events_per_layer}</div>
+            <div>Platform: ${stats.platform}</div>
+        `;
+        document.getElementById('statsSummary').style.display = 'block';
+
+        // Display detailed table
+        if (stats.stat_buffer && stats.stat_buffer.length > 0) {
+            const tableBody = document.getElementById('statsTableBody');
+            tableBody.innerHTML = '';
+
+            // Parse stat buffer and populate table
+            // This is a simplified version - you'll need to parse based on your specific format
+            for (let i = 0; i < Math.min(stats.captured_events, 10); i++) {
+                const row = tableBody.insertRow();
+                row.insertCell(0).textContent = i;
+                row.insertCell(1).textContent = `Layer ${i}`;
+                row.insertCell(2).textContent = stats.stat_buffer[i * 4] || 0;
+                row.insertCell(3).textContent = stats.stat_buffer[i * 4 + 1] || 0;
+                row.insertCell(4).textContent = stats.stat_buffer[i * 4 + 2] || 0;
+            }
+
+            document.getElementById('statsTable').style.display = 'block';
+        }
+    }
+
+    // Export stats
+    exportStatsButton.addEventListener('click', () => {
+        if (!performanceStats) {
+            snack('No stats to export', 1);
+            return;
+        }
+
+        const csvContent = generateCSV(performanceStats);
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'performance_stats.csv';
+        a.click();
+        window.URL.revokeObjectURL(url);
+        snack('Stats exported to CSV', 0);
+    });
+
+    function generateCSV(stats) {
+        let csv = 'Layer,Tag,Time (μs),MACs,Cycles\n';
+        
+        if (stats.stat_buffer && stats.stat_buffer.length > 0) {
+            for (let i = 0; i < Math.min(stats.captured_events, 10); i++) {
+                csv += `${i},Layer ${i},${stats.stat_buffer[i * 4] || 0},${stats.stat_buffer[i * 4 + 1] || 0},${stats.stat_buffer[i * 4 + 2] || 0}\n`;
+            }
+        }
+        
+        return csv;
+    }
+
+    // TFLite model parsing (improved)
+    async function parseTFLiteModel(modelData) {
+        const view = new DataView(modelData);
+        
+        // Check if file is too small to be a valid TFLite model
+        if (modelData.byteLength < 12) {
+            throw new Error('File too small to be a valid TFLite model');
+        }
+
+        // TFLite files start with a 4-byte identifier
+        // The first 4 bytes should be the model identifier
+        const modelIdentifier = view.getUint32(0, true); // little-endian
+        
+        // TFLite models typically have specific identifiers
+        // We'll be more lenient and just check for reasonable file structure
+        if (modelData.byteLength < 1024) {
+            throw new Error('File too small to be a valid TFLite model');
+        }
+
+        // For now, accept any file that's reasonably sized and has a .tflite extension
+        // In a production environment, you'd want to implement full TFLite parsing
+        console.log('TFLite model loaded, size:', modelData.byteLength, 'bytes');
+        
+        // Return basic metadata - in a real implementation, you'd parse the actual model structure
+        return {
+            total_size: modelData.byteLength,
+            model_type: 'tflite',
+            num_inputs: 1,  // Default values - would be parsed from model
+            num_outputs: 1, // Default values - would be parsed from model
+            total_input_tensor_bytes: 1024,  // Default - would be calculated from model
+            total_output_tensor_bytes: 1024, // Default - would be calculated from model
+            input_tensor_byte_lengths: [1024],  // Default - would be parsed from model
+            output_tensor_byte_lengths: [1024]  // Default - would be parsed from model
+        };
+    }
+
+    snack('Neural Network Speech Enhancement USB Demo - Autodeploy Ready', 1)
+
+    if ("usb" in navigator) {
+        pairButton.addEventListener('click', function (event) {
+            old_usbConnect();
+        });
+    } else {
+        msg("browser not supported");
+        snack("Error: This browser doesn't support WebUSB. Try using Chrome.", 1);
+    }
+
+    async function old_usbConnect() {
+        pairButton.style.backgroundColor = "grey";
+        pairButton.style.color = 'black';
+        pairButton.innerHTML = "CONNECTING";
+        msg('requesting device ...');
+
+        function connect() {
+            port.connect().then(
+                () => {
+                    port.onReceive = data => {
+                        // Log ALL received data for debugging
+                        console.log('=== USB DATA RECEIVED ===');
+                        console.log('Data length:', data.byteLength);
+                        if (data && data.byteLength > 0) {
+                            const dataArray = new Uint8Array(data.buffer);
+                            console.log('Raw data:', Array.from(dataArray).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+                            console.log('As string:', new TextDecoder().decode(dataArray));
+                            
+                            // Check if this is an ACK response (2 bytes: 0xAA, chunk_id)
+                            if (data.byteLength === 2 && dataArray[0] === 0xAA) {
+                                console.log('Received ACK for chunk:', dataArray[1]);
+                                // Handle ACK - this will be processed by waitForAck
+                                return; // Don't log further
+                            }
+                            
+                            // Check for heartbeat or response messages
+                            if (data.byteLength === 5) {
+                                const message = new TextDecoder().decode(dataArray);
+                                if (message === 'HELLO') {
+                                    console.log('Received HELLO heartbeat from firmware');
+                                    snack('Firmware heartbeat received!', 0);
+                                    return;
+                                } else if (message === 'RECV') {
+                                    console.log('Received RECV response from firmware');
+                                    snack('Firmware received packet!', 0);
+                                    return;
+                                }
+                            }
+                            
+                            // Filter out audio data (83 bytes) and status data (7 bytes)
+                            if (data.byteLength === 83 || data.byteLength === 7) {
+                                console.log('Filtered out audio/status data');
+                                return;
+                            }
+                            
+                            // Only log unexpected data during upload debugging
+                            console.log('Received unexpected data:', data.byteLength, 'bytes:', Array.from(dataArray.slice(0, Math.min(10, dataArray.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+                        }
+                        console.log('=== END USB DATA ===');
+                    };
+                    port.onReceiveError = error => {
+                        console.log("Error1: " + error);
+                        console.error(error);
+                    };
+                },
+                error => {
+                    console.log("Error2: " + error);
+                    msg(error);
+                });
+         }   
+
+        serial.requestPort()
+            .then(selectedPort => {
+                port = selectedPort;
+                connect();
+            })
+            .catch(error => {
+                console.log("Error3: " + error);
+                msg(error);
+            });
+
+        pairButton.style.backgroundColor = 'green';
+        pairButton.style.color = 'white';
+        pairButton.innerHTML = "CONNECTED";
+        msg('Connected');
+    }
+
+    function onDisconnected(event) {
+        let device = event.target;
+        pairButton.style.backgroundColor = "red";
+        pairButton.innerHTML = "PAIR";
+        snack("Device disconnected, please retry", 1)
+        snack('Device ' + device.name + ' has been disconnected.', 1);
+        msg("Disconnected");
+}
+
+  // Top middle information label
+  function msg(m) {
+    BLEstatus.innerHTML = m;
+  }
+
+  //Top left pop up messaage
+  function snack(m, warningLevel) {
+    snackBar = document.getElementById("snackbar");
+    snackBar.style.visibility = "visible";
+    snackBar.className = "show";
+
+    var warnEmoji = warningLevel ? '☝️  ' : '✅  ';
+
+    setTimeout(function () { snackBar.className = snackBar.className.replace("show", ""); }, 501);
+    snackBar.innerHTML = m + ' <span onClick=hideSnack() style="cursor:pointer; margin-left: 15px"> X </span> ';
+  }
+
+  function hideSnack() {
+    snackBar = document.getElementById("snackbar");
+    snackBar.style.visibility = "hidden";
+  }
+
+</script>
+
+</html>
+
+
