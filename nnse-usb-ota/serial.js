@@ -159,13 +159,15 @@ serial.Port.prototype.waitForAck = function(expectedChunk, timeoutMs = 1000) {
 
 // Main upload function
 serial.Port.prototype.uploadModel = async function(file, onProgress, onError, onComplete) {
-    const chunkSize = 1024;
+    // USB transfer limit is 512 bytes, but we need space for frame header (2) + packet header (7)
+    // So maximum chunk data size = 512 - 2 - 7 = 503 bytes
+    const chunkSize = 40; // Conservative size to ensure we stay under USB limit
     const fileBuf = new Uint8Array(await file.arrayBuffer());
     const totalChunks = Math.ceil(fileBuf.length / chunkSize);
     let retries = 0;
     let maxRetries = 5;
     
-    console.log(`Starting upload: ${fileBuf.length} bytes, ${totalChunks} chunks`);
+    console.log(`Starting upload: ${fileBuf.length} bytes, ${totalChunks} chunks (${chunkSize} bytes per chunk)`);
     
     for (let chunkNum = 0; chunkNum < totalChunks; chunkNum++) {
         let sent = false;
@@ -177,6 +179,9 @@ serial.Port.prototype.uploadModel = async function(file, onProgress, onError, on
         let calculatedCrc = crc32(chunkData);
         console.log(`Chunk ${chunkNum}: size=${chunkData.length}, CRC32=0x${(calculatedCrc >>> 0).toString(16).padStart(8, '0')}`);
         
+        // Debug: Show first few bytes of chunk data
+        console.log(`Chunk data (first 8 bytes):`, Array.from(chunkData.slice(0, 8)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+        
         // Create header (7 bytes)
         let header = new Uint8Array(7);
         let view = new DataView(header.buffer);
@@ -186,6 +191,9 @@ serial.Port.prototype.uploadModel = async function(file, onProgress, onError, on
         view.setUint8(6, totalChunks);
         
         console.log(`Header: CRC32=0x${(calculatedCrc >>> 0).toString(16).padStart(8, '0')}, cmd=1, chunk=${chunkNum}, total=${totalChunks}`);
+        
+        // Debug: Show header bytes
+        console.log(`Header bytes:`, Array.from(header).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
         
         // Combine header and chunk data
         let packet = new Uint8Array(header.length + chunkData.length);
