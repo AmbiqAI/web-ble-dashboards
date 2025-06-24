@@ -123,33 +123,21 @@ function crc32(buf) {
 serial.Port.prototype.waitForAck = function(expectedChunk, timeoutMs = 1000) {
     return new Promise((resolve, reject) => {
         let timeout = setTimeout(() => reject('ACK timeout'), timeoutMs);
-        
-        // Store the original onReceive handler
         const originalOnReceive = this.onReceive;
-        
-        // Create a temporary handler for ACK detection
         this.onReceive = (data) => {
-            console.log(`Received data: ${data.byteLength} bytes`);
-            if (data && data.byteLength > 0) {
+            if (data && data.byteLength === 5) {
                 const dataArray = new Uint8Array(data.buffer);
-                console.log(`Data bytes:`, Array.from(dataArray.slice(0, Math.min(10, dataArray.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
-                
-                // Check for ACK response
-                if (dataArray.length >= 2) {
-                    if (dataArray[0] === 0xAA && dataArray[1] === expectedChunk) {
-                        console.log(`ACK received for chunk ${expectedChunk}: 0xAA 0x${expectedChunk.toString(16).padStart(2, '0')}`);
+                if (dataArray[0] === 0xAA) {
+                    // Parse chunk_id from bytes 1-4 (LE)
+                    const ackChunkId = dataArray[1] | (dataArray[2] << 8) | (dataArray[3] << 16) | (dataArray[4] << 24);
+                    if (ackChunkId === expectedChunk) {
                         clearTimeout(timeout);
-                        // Restore original handler
                         this.onReceive = originalOnReceive;
                         resolve();
                         return;
-                    } else {
-                        console.log(`Not an ACK: expected 0xAA 0x${expectedChunk.toString(16).padStart(2, '0')}, got 0x${dataArray[0].toString(16).padStart(2, '0')} 0x${dataArray[1].toString(16).padStart(2, '0')}`);
                     }
                 }
             }
-            
-            // If not an ACK, call the original handler
             if (originalOnReceive) {
                 originalOnReceive(data);
             }
@@ -161,7 +149,7 @@ serial.Port.prototype.waitForAck = function(expectedChunk, timeoutMs = 1000) {
 serial.Port.prototype.uploadModel = async function(file, onProgress, onError, onComplete) {
     // USB transfer limit is 512 bytes, but we need space for frame header (2) + packet header (7)
     // So maximum chunk data size = 512 - 2 - 7 = 503 bytes
-    const chunkSize = 40; // Conservative size to ensure we stay under USB limit
+    const chunkSize = 400; // Conservative size to ensure we stay under USB limit
     const fileBuf = new Uint8Array(await file.arrayBuffer());
     const totalChunks = Math.ceil(fileBuf.length / chunkSize);
     let retries = 0;
@@ -182,13 +170,13 @@ serial.Port.prototype.uploadModel = async function(file, onProgress, onError, on
         // Debug: Show first few bytes of chunk data
         console.log(`Chunk data (first 8 bytes):`, Array.from(chunkData.slice(0, 8)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
         
-        // Create header (7 bytes)
-        let header = new Uint8Array(7);
+        // Create header (13 bytes)
+        let header = new Uint8Array(13);
         let view = new DataView(header.buffer);
         view.setUint32(0, calculatedCrc, true); // CRC32 LE
         view.setUint8(4, 1); // chunk command: 1=MODEL_CHUNK
-        view.setUint8(5, chunkNum);
-        view.setUint8(6, totalChunks);
+        view.setUint32(5, chunkNum, true); // chunk_id as uint32_t, LE
+        view.setUint32(9, totalChunks, true); // total_chunks as uint32_t, LE
         
         console.log(`Header: CRC32=0x${(calculatedCrc >>> 0).toString(16).padStart(8, '0')}, cmd=1, chunk=${chunkNum}, total=${totalChunks}`);
         

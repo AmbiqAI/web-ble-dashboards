@@ -525,16 +525,16 @@
         try {
             console.log('Starting test packet...');
             
-            // Create a simple test packet with 7-byte header + 4 bytes of data
+            // Create a simple test packet with 13-byte header + 4 bytes of data
             const testData = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
             const calculatedCrc = calcCrc32(0xFFFFFFFF, testData.length, testData);
             
-            const header = new Uint8Array(7);
+            const header = new Uint8Array(13);
             const view = new DataView(header.buffer);
             view.setUint32(0, calculatedCrc, true); // CRC32 LE
             view.setUint8(4, 1); // chunk command: 1=MODEL_CHUNK
-            view.setUint8(5, 0); // chunk_id = 0
-            view.setUint8(6, 1); // total_chunks = 1
+            view.setUint32(5, 0, true); // chunk_id = 0 (uint32_t, LE)
+            view.setUint32(9, 1, true); // total_chunks = 1 (uint32_t, LE)
             
             const packet = new Uint8Array(header.length + testData.length);
             packet.set(header, 0);
