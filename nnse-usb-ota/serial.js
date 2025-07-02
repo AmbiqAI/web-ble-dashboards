@@ -149,7 +149,7 @@ serial.Port.prototype.waitForAck = function(expectedChunk, timeoutMs = 1000) {
 serial.Port.prototype.uploadModel = async function(file, onProgress, onError, onComplete) {
     // USB transfer limit is 512 bytes, but we need space for frame header (2) + packet header (7)
     // So maximum chunk data size = 512 - 2 - 7 = 503 bytes
-    const chunkSize = 400; // Conservative size to ensure we stay under USB limit
+    const chunkSize = 480; // Conservative size to ensure we stay under USB limit
     const fileBuf = new Uint8Array(await file.arrayBuffer());
     const totalChunks = Math.ceil(fileBuf.length / chunkSize);
     let retries = 0;

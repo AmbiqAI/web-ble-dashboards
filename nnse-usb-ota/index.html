@@ -4,7 +4,6 @@
 <head>
   <title>NNSE over USB - Autodeploy</title>
   <link href='https://fonts.googleapis.com/css?family=Roboto Mono' rel='stylesheet'>
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <!-- <script src="https://cdn.jsdelivr.net/npm/flatbuffers@23.5.26/lib/flatbuffers.min.js"></script> -->
 
 
@@ -296,7 +295,7 @@
 
                 <div class="tab-container">
                     <div class="tab active" onclick="switchTab('upload')">Model Upload</div>
-                    <div class="tab" onclick="switchTab('config')">Configuration</div>
+                    <!-- <div class="tab" onclick="switchTab('config')">Configuration</div> -->
                     <div class="tab" onclick="switchTab('validation')">Validation</div>
                     <div class="tab" onclick="switchTab('stats')">Performance Stats</div>
                 </div>
@@ -307,20 +306,9 @@
                         <div class="config-label">Model File:</div>
                         <input type="file" id="modelFile" accept=".tflite" style="display: none;">
                         <button id="selectModelButton" class="action-button">Select Model</button>
-                        <button id="uploadModelButton" class="action-button" disabled>Upload Model</button>
-                        <button id="testPacketButton" class="action-button">Test Packet</button>
-                        <button id="pingButton" class="action-button">Ping Test</button>
+                        <!-- <button id="testPacketButton" class="action-button">Test Packet</button>
+                        <button id="pingButton" class="action-button">Ping Test</button> -->
                     </div>
-                    <div id="uploadProgress" class="progress-container">
-                        <div class="progress-bar">
-                            <div id="progressFill" class="progress-fill"></div>
-                        </div>
-                        <div id="progressText" style="text-align: center; font-size: 12px;">0%</div>
-                    </div>
-                </div>
-
-                <!-- Configuration Tab -->
-                <div id="config-tab" class="tab-content">
                     <div class="config-row">
                         <div class="config-label">Model Location:</div>
                         <select id="modelLocation" class="config-select">
@@ -358,8 +346,15 @@
                         <input type="number" id="validationRuns" class="config-input" value="10" min="1" max="1000">
                     </div>
                     <div class="config-row">
-                        <button id="configureModelButton" class="action-button">Configure Model</button>
+                        <button id="uploadModelButton" class="action-button" disabled>Upload Model</button>
+                        <!-- <button id="configureModelButton" class="action-button">Configure Model</button> -->
                         <button id="getStatsButton" class="action-button">Get Performance Stats</button>
+                    </div>
+                    <div id="uploadProgress" class="progress-container">
+                        <div class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <div id="progressText" style="text-align: center; font-size: 12px;">0%</div>
                     </div>
                 </div>
 
@@ -429,7 +424,7 @@
     const progressText = document.getElementById('progressText');
 
     // Configuration elements
-    const configureModelButton = document.getElementById('configureModelButton');
+    // const configureModelButton = document.getElementById('configureModelButton');
     const getStatsButton = document.getElementById('getStatsButton');
     const startValidationButton = document.getElementById('startValidationButton');
     const stopValidationButton = document.getElementById('stopValidationButton');
@@ -515,119 +510,119 @@
         }
     });
 
-    // Test packet
-    testPacketButton.addEventListener('click', async () => {
-        if (!port) {
-            snack('Please connect to device first', 1);
-            return;
-        }
+    // // Test packet
+    // testPacketButton.addEventListener('click', async () => {
+    //     if (!port) {
+    //         snack('Please connect to device first', 1);
+    //         return;
+    //     }
         
-        try {
-            console.log('Starting test packet...');
+    //     try {
+    //         console.log('Starting test packet...');
             
-            // Create a simple test packet with 13-byte header + 4 bytes of data
-            const testData = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
-            const calculatedCrc = calcCrc32(0xFFFFFFFF, testData.length, testData);
+    //         // Create a simple test packet with 13-byte header + 4 bytes of data
+    //         const testData = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
+    //         const calculatedCrc = calcCrc32(0xFFFFFFFF, testData.length, testData);
             
-            const header = new Uint8Array(13);
-            const view = new DataView(header.buffer);
-            view.setUint32(0, calculatedCrc, true); // CRC32 LE
-            view.setUint8(4, 1); // chunk command: 1=MODEL_CHUNK
-            view.setUint32(5, 0, true); // chunk_id = 0 (uint32_t, LE)
-            view.setUint32(9, 1, true); // total_chunks = 1 (uint32_t, LE)
+    //         const header = new Uint8Array(13);
+    //         const view = new DataView(header.buffer);
+    //         view.setUint32(0, calculatedCrc, true); // CRC32 LE
+    //         view.setUint8(4, 1); // chunk command: 1=MODEL_CHUNK
+    //         view.setUint32(5, 0, true); // chunk_id = 0 (uint32_t, LE)
+    //         view.setUint32(9, 1, true); // total_chunks = 1 (uint32_t, LE)
             
-            const packet = new Uint8Array(header.length + testData.length);
-            packet.set(header, 0);
-            packet.set(testData, header.length);
+    //         const packet = new Uint8Array(header.length + testData.length);
+    //         packet.set(header, 0);
+    //         packet.set(testData, header.length);
             
-            // Add 2-byte frame header for raw data (RX_RAW_DATA = 2)
-            const frameHeader = new Uint8Array([0x00, 0x02]); // RX_RAW_DATA = 2, big-endian (high byte first)
-            const fullPacket = new Uint8Array(frameHeader.length + packet.length);
-            fullPacket.set(frameHeader, 0);
-            fullPacket.set(packet, frameHeader.length);
+    //         // Add 2-byte frame header for raw data (RX_RAW_DATA = 2)
+    //         const frameHeader = new Uint8Array([0x00, 0x02]); // RX_RAW_DATA = 2, big-endian (high byte first)
+    //         const fullPacket = new Uint8Array(frameHeader.length + packet.length);
+    //         fullPacket.set(frameHeader, 0);
+    //         fullPacket.set(packet, frameHeader.length);
             
-            console.log('Sending test packet with frame header:', Array.from(fullPacket).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
-            console.log('Packet length:', fullPacket.length, 'bytes');
+    //         console.log('Sending test packet with frame header:', Array.from(fullPacket).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+    //         console.log('Packet length:', fullPacket.length, 'bytes');
             
-            await port.send(fullPacket);
-            console.log('Test packet sent successfully');
-            snack('Test packet sent!', 0);
+    //         await port.send(fullPacket);
+    //         console.log('Test packet sent successfully');
+    //         snack('Test packet sent!', 0);
             
-            // Wait a moment and check for any responses
-            setTimeout(() => {
-                console.log('Checking for responses after test packet...');
-            }, 1000);
+    //         // Wait a moment and check for any responses
+    //         setTimeout(() => {
+    //             console.log('Checking for responses after test packet...');
+    //         }, 1000);
             
-        } catch (error) {
-            console.error('Test packet failed:', error);
-            snack('Test packet failed: ' + error.message, 1);
-        }
-    });
+    //     } catch (error) {
+    //         console.error('Test packet failed:', error);
+    //         snack('Test packet failed: ' + error.message, 1);
+    //     }
+    // });
 
-    // Ping test
-    pingButton.addEventListener('click', async () => {
-        if (!port) {
-            snack('Please connect to device first', 1);
-            return;
-        }
+    // // Ping test
+    // pingButton.addEventListener('click', async () => {
+    //     if (!port) {
+    //         snack('Please connect to device first', 1);
+    //         return;
+    //     }
         
-        try {
-            console.log('Starting ping test...');
+    //     try {
+    //         console.log('Starting ping test...');
             
-            // Send a simple ping message
-            const pingData = new Uint8Array([0x50, 0x49, 0x4E, 0x47]); // "PING"
+    //         // Send a simple ping message
+    //         const pingData = new Uint8Array([0x50, 0x49, 0x4E, 0x47]); // "PING"
             
-            // Add 2-byte frame header for raw data (RX_RAW_DATA = 2)
-            const frameHeader = new Uint8Array([0x00, 0x02]); // RX_RAW_DATA = 2, big-endian (high byte first)
-            const fullPacket = new Uint8Array(frameHeader.length + pingData.length);
-            fullPacket.set(frameHeader, 0);
-            fullPacket.set(pingData, frameHeader.length);
+    //         // Add 2-byte frame header for raw data (RX_RAW_DATA = 2)
+    //         const frameHeader = new Uint8Array([0x00, 0x02]); // RX_RAW_DATA = 2, big-endian (high byte first)
+    //         const fullPacket = new Uint8Array(frameHeader.length + pingData.length);
+    //         fullPacket.set(frameHeader, 0);
+    //         fullPacket.set(pingData, frameHeader.length);
             
-            console.log('Sending ping with frame header:', Array.from(fullPacket).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+    //         console.log('Sending ping with frame header:', Array.from(fullPacket).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
             
-            await port.send(fullPacket);
-            console.log('Ping sent successfully');
-            snack('Ping sent!', 0);
+    //         await port.send(fullPacket);
+    //         console.log('Ping sent successfully');
+    //         snack('Ping sent!', 0);
             
-            // Wait a moment and check for any responses
-            setTimeout(() => {
-                console.log('Checking for responses after ping...');
-            }, 1000);
+    //         // Wait a moment and check for any responses
+    //         setTimeout(() => {
+    //             console.log('Checking for responses after ping...');
+    //         }, 1000);
             
-        } catch (error) {
-            console.error('Ping failed:', error);
-            snack('Ping failed: ' + error.message, 1);
-        }
-    });
+    //     } catch (error) {
+    //         console.error('Ping failed:', error);
+    //         snack('Ping failed: ' + error.message, 1);
+    //     }
+    // });
 
     // Configure model
-    configureModelButton.addEventListener('click', configureModel);
+    // configureModelButton.addEventListener('click', configureModel);
 
-    async function configureModel() {
-        if (!port) {
-            snack('Please connect to device first', 1);
-            return;
-        }
+    // async function configureModel() {
+    //     if (!port) {
+    //         snack('Please connect to device first', 1);
+    //         return;
+    //     }
 
-        try {
-            const config = {
-                prof_enable: document.getElementById('profileEnable').checked ? 1 : 0,
-                total_input_tensor_bytes: currentModelMetadata?.total_input_tensor_bytes || 1024,
-                total_output_tensor_bytes: currentModelMetadata?.total_output_tensor_bytes || 1024,
-                profile_warmup: parseInt(document.getElementById('profileWarmup').value),
-                num_inputs: currentModelMetadata?.num_inputs || 1,
-                num_outputs: currentModelMetadata?.num_outputs || 1,
-                full_pmu_capture: document.getElementById('fullPmuCapture').checked ? 1 : 0,
-                input_tensor_byte_lengths: currentModelMetadata?.input_tensor_byte_lengths || [1024],
-                output_tensor_byte_lengths: currentModelMetadata?.output_tensor_byte_lengths || [1024]
-            };
+    //     try {
+    //         const config = {
+    //             prof_enable: document.getElementById('profileEnable').checked ? 1 : 0,
+    //             total_input_tensor_bytes: currentModelMetadata?.total_input_tensor_bytes || 1024,
+    //             total_output_tensor_bytes: currentModelMetadata?.total_output_tensor_bytes || 1024,
+    //             profile_warmup: parseInt(document.getElementById('profileWarmup').value),
+    //             num_inputs: currentModelMetadata?.num_inputs || 1,
+    //             num_outputs: currentModelMetadata?.num_outputs || 1,
+    //             full_pmu_capture: document.getElementById('fullPmuCapture').checked ? 1 : 0,
+    //             input_tensor_byte_lengths: currentModelMetadata?.input_tensor_byte_lengths || [1024],
+    //             output_tensor_byte_lengths: currentModelMetadata?.output_tensor_byte_lengths || [1024]
+    //         };
 
-            await port.sendModelConfig(config);
-            snack('Model configured successfully', 0);
-        } catch (error) {
-            snack('Configuration failed: ' + error.message, 1);
-        }
-    }
+    //         await port.sendModelConfig(config);
+    //         snack('Model configured successfully', 0);
+    //     } catch (error) {
+    //         snack('Configuration failed: ' + error.message, 1);
+    //     }
+    // }
 
     // Get performance stats
     getStatsButton.addEventListener('click', getPerformanceStats);
@@ -746,7 +741,7 @@
         };
     }
 
-    snack('Neural Network Speech Enhancement USB Demo - Autodeploy Ready', 1)
+    snack('WebUSB Demo - Autodeploy Ready', 1)
 
     if ("usb" in navigator) {
         pairButton.addEventListener('click', function (event) {
