@@ -480,14 +480,24 @@
             snack('Please select a model file first', 1);
             return;
         }
+        
+        // Get the selected model location and arena location
+        const modelLocation = parseInt(document.getElementById('modelLocation').value);
+        const arenaLocation = parseInt(document.getElementById('arenaLocation').value);
+        console.log('Selected model location:', modelLocation === 0 ? 'TCM' : 'SRAM');
+        console.log('Selected arena location:', arenaLocation === 0 ? 'TCM' : 'SRAM');
+        
         try {
             uploadModelButton.disabled = true;
             selectModelButton.disabled = true;
             uploadProgress.style.display = 'block';
             progressFill.style.width = '0%';
             progressText.textContent = '0%';
+            
             await port.uploadModel(
                 currentModelData,
+                modelLocation, // Pass the model location
+                arenaLocation, // Pass the arena location
                 (progress) => {
                     progressFill.style.width = `${progress}%`;
                     progressText.textContent = `${Math.round(progress)}%`;
@@ -635,44 +645,71 @@
         }
 
         try {
-            performanceStats = await port.getModelStats();
-            displayPerformanceStats(performanceStats);
+            console.log('=== Starting Performance Stats Request ===');
+            console.log('Requesting performance stats...');
+            
+            // Get current configuration for debugging
+            const modelLocation = parseInt(document.getElementById('modelLocation').value);
+            const arenaLocation = parseInt(document.getElementById('arenaLocation').value);
+            console.log('Current configuration:');
+            console.log('  Model location:', modelLocation === 0 ? 'TCM' : 'SRAM');
+            console.log('  Arena location:', arenaLocation === 0 ? 'TCM' : 'SRAM');
+            
+            // Show loading state
+            getStatsButton.disabled = true;
+            getStatsButton.textContent = 'Requesting...';
+            
+            const stats = await port.requestStats();
+            console.log('Performance stats received:', stats);
+            displayPerformanceStats(stats);
             snack('Performance stats received', 0);
         } catch (error) {
+            console.error('Failed to get stats:', error);
             snack('Failed to get stats: ' + error.message, 1);
+        } finally {
+            // Reset button state
+            getStatsButton.disabled = false;
+            getStatsButton.textContent = 'Get Performance Stats';
+            console.log('=== Performance Stats Request Complete ===');
         }
     }
 
     function displayPerformanceStats(stats) {
+        // Get current configuration for display
+        const modelLocation = document.getElementById('modelLocation').value === '0' ? 'TCM' : 'SRAM';
+        const arenaLocation = document.getElementById('arenaLocation').value === '0' ? 'TCM' : 'SRAM';
+        
         // Display summary
         const summaryContent = document.getElementById('summaryContent');
         summaryContent.innerHTML = `
-            <div>Arena Size: ${stats.computed_arena_size} bytes</div>
-            <div>Stat Buffer Size: ${stats.computed_stat_buffer_size} bytes</div>
-            <div>Captured Events: ${stats.captured_events}</div>
-            <div>PMU Events per Layer: ${stats.pmu_events_per_layer}</div>
-            <div>Platform: ${stats.platform}</div>
+            <div><strong>Inference Cycles:</strong> ${stats.cycles.toLocaleString()}</div>
+            <div><strong>Status:</strong> ${stats.status === 0 ? 'Success' : 'Error'}</div>
+            <div><strong>Model Location:</strong> ${modelLocation}</div>
+            <div><strong>Arena Location:</strong> ${arenaLocation}</div>
         `;
         document.getElementById('statsSummary').style.display = 'block';
 
         // Display detailed table
-        if (stats.stat_buffer && stats.stat_buffer.length > 0) {
-            const tableBody = document.getElementById('statsTableBody');
-            tableBody.innerHTML = '';
+        const tableBody = document.getElementById('statsTableBody');
+        tableBody.innerHTML = '';
 
-            // Parse stat buffer and populate table
-            // This is a simplified version - you'll need to parse based on your specific format
-            for (let i = 0; i < Math.min(stats.captured_events, 10); i++) {
-                const row = tableBody.insertRow();
-                row.insertCell(0).textContent = i;
-                row.insertCell(1).textContent = `Layer ${i}`;
-                row.insertCell(2).textContent = stats.stat_buffer[i * 4] || 0;
-                row.insertCell(3).textContent = stats.stat_buffer[i * 4 + 1] || 0;
-                row.insertCell(4).textContent = stats.stat_buffer[i * 4 + 2] || 0;
-            }
+        // Add a single row for the inference result
+        const row = tableBody.insertRow();
+        row.insertCell(0).textContent = '1';
+        row.insertCell(1).textContent = 'Model Inference';
+        row.insertCell(2).textContent = stats.cycles.toLocaleString();
+        row.insertCell(3).textContent = stats.status === 0 ? 'Success' : 'Error';
+        row.insertCell(4).textContent = 'N/A'; // MACs not available in this simple version
 
-            document.getElementById('statsTable').style.display = 'block';
-        }
+        document.getElementById('statsTable').style.display = 'block';
+        
+        // Log to console for debugging
+        console.log('Performance Stats Displayed:', {
+            cycles: stats.cycles,
+            status: stats.status,
+            modelLocation: modelLocation,
+            arenaLocation: arenaLocation
+        });
     }
 
     // Export stats
@@ -694,13 +731,13 @@
     });
 
     function generateCSV(stats) {
-        let csv = 'Layer,Tag,Time (μs),MACs,Cycles\n';
+        let csv = 'Layer,Tag,Cycles,Status,Model Location,Arena Location\n';
         
-        if (stats.stat_buffer && stats.stat_buffer.length > 0) {
-            for (let i = 0; i < Math.min(stats.captured_events, 10); i++) {
-                csv += `${i},Layer ${i},${stats.stat_buffer[i * 4] || 0},${stats.stat_buffer[i * 4 + 1] || 0},${stats.stat_buffer[i * 4 + 2] || 0}\n`;
-            }
-        }
+        const modelLocation = document.getElementById('modelLocation').value === '0' ? 'TCM' : 'SRAM';
+        const arenaLocation = document.getElementById('arenaLocation').value === '0' ? 'TCM' : 'SRAM';
+        const statusText = stats.status === 0 ? 'Success' : 'Error';
+        
+        csv += `1,Model Inference,${stats.cycles},${statusText},${modelLocation},${arenaLocation}\n`;
         
         return csv;
     }
