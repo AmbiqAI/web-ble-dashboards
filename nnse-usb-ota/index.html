@@ -713,21 +713,17 @@
     }
 
     // Export stats
-    exportStatsButton.addEventListener('click', () => {
-        if (!performanceStats) {
-            snack('No stats to export', 1);
+    exportStatsButton.addEventListener('click', async () => {
+        if (!port) {
+            snack('Device not connected', 1);
             return;
         }
-
-        const csvContent = generateCSV(performanceStats);
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'performance_stats.csv';
-        a.click();
-        window.URL.revokeObjectURL(url);
-        snack('Stats exported to CSV', 0);
+        try {
+            await port.requestPmuCsv();
+            snack('Requested PMU CSV from device. Download will start automatically.', 0);
+        } catch (e) {
+            snack('Failed to request PMU CSV: ' + e, 1);
+        }
     });
 
     function generateCSV(stats) {

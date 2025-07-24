@@ -35,6 +35,7 @@ serial.requestPort =
     this.interfaceNumber = 0;
     this.endpointIn      = 0;
     this.endpointOut     = 0;
+    this.listeners = [];
 };
 
 serial.Port.prototype.connect = function() {
@@ -44,11 +45,11 @@ serial.Port.prototype.connect = function() {
         this.device_.transferIn(this.endpointIn, 512)
             .then(
                 result => {
-                    this.onReceive(result.data);
+                    this.handleReceive(result.data);
                     readLoop();
                 },
                 error => {
-                    this.onReceiveError(error);
+                    if (this.onReceiveError) this.onReceiveError(error);
                 });
     };
 
@@ -119,29 +120,41 @@ function crc32(buf) {
     return calcCrc32(0xFFFFFFFF, buf.length, buf);
 }
 
+serial.Port.prototype.handleReceive = function(data) {
+    // Call all listeners, remove those that return true (handled)
+    this.listeners = this.listeners.filter(listener => {
+        try {
+            return !listener(data);
+        } catch (e) {
+            console.error('Listener threw:', e);
+            return false;
+        }
+    });
+};
+
+serial.Port.prototype.addListener = function(listener) {
+    this.listeners.push(listener);
+};
+
 // Helper: Wait for ACK
 serial.Port.prototype.waitForAck = function(expectedChunk, timeoutMs = 1000) {
     return new Promise((resolve, reject) => {
         let timeout = setTimeout(() => reject('ACK timeout'), timeoutMs);
-        const originalOnReceive = this.onReceive;
-        this.onReceive = (data) => {
+        this.addListener((data) => {
             if (data && data.byteLength === 5) {
                 const dataArray = new Uint8Array(data.buffer);
                 if (dataArray[0] === 0xAA) {
-                    // Parse chunk_id from bytes 1-4 (LE)
                     const ackChunkId = dataArray[1] | (dataArray[2] << 8) | (dataArray[3] << 16) | (dataArray[4] << 24);
+                    console.log('[ACK] Received ACK for chunk', ackChunkId, 'expected', expectedChunk);
                     if (ackChunkId === expectedChunk) {
                         clearTimeout(timeout);
-                        this.onReceive = originalOnReceive;
                         resolve();
-                        return;
+                        return true; // Remove this listener
                     }
                 }
             }
-            if (originalOnReceive) {
-                originalOnReceive(data);
-            }
-        };
+            return false; // Keep this listener
+        });
     });
 };
 
@@ -194,8 +207,7 @@ serial.Port.prototype.requestStats = async function() {
             reject(new Error('Stats request timeout'));
         }, 100000); // 10 second timeout
 
-        const originalOnReceive = this.onReceive;
-        this.onReceive = (data) => {
+        this.addListener((data) => {
             console.log('Stats response received:', data.byteLength, 'bytes');
             if (data && data.byteLength > 0) {
                 const dataArray = new Uint8Array(data.buffer);
@@ -210,29 +222,127 @@ serial.Port.prototype.requestStats = async function() {
                     console.log('Parsed stats response:', { cycles, status });
                     
                     clearTimeout(timeout);
-                    this.onReceive = originalOnReceive;
                     resolve({ cycles, status });
-                    return;
+                    return true; // Remove this listener
                 } else if (data.byteLength === 5) {
                     // Check if this is a "RECV" message (which might indicate the command was received)
                     const message = new TextDecoder().decode(dataArray);
                     if (message === 'RECV') {
                         console.log('Received RECV confirmation, waiting for stats...');
                         // Don't resolve yet, wait for the actual stats
-                        return;
+                        return false; // Keep this listener
                     }
                 }
             }
             
             // Pass through to original handler for other data
-            if (originalOnReceive) {
-                originalOnReceive(data);
-            }
-        };
+            return false; // Keep this listener
+        });
 
         // Send the request
         this.send(packet).catch(reject);
     });
+};
+
+let pmuCsvRows = [];
+let pmuCsvTotalChunks = null;
+let pmuCsvExpectedChunk = 0;
+
+let pmuCsvHeader = "Tag, uSeconds, ARM_PMU_SW_INCR,ARM_PMU_L1I_CACHE_REFILL,ARM_PMU_L1D_CACHE_REFILL,ARM_PMU_L1D_CACHE,ARM_PMU_LD_RETIRED,ARM_PMU_ST_RETIRED,ARM_PMU_INST_RETIRED,ARM_PMU_EXC_TAKEN,ARM_PMU_EXC_RETURN,ARM_PMU_PC_WRITE_RETIRED,ARM_PMU_BR_IMMED_RETIRED,ARM_PMU_BR_RETURN_RETIRED,ARM_PMU_UNALIGNED_LDST_RETIRED,ARM_PMU_CPU_CYCLES,ARM_PMU_MEM_ACCESS,ARM_PMU_L1I_CACHE,ARM_PMU_L1D_CACHE_WB,ARM_PMU_BUS_ACCESS,ARM_PMU_MEMORY_ERROR,ARM_PMU_BUS_CYCLES,ARM_PMU_CHAIN,ARM_PMU_L1D_CACHE_ALLOCATE,ARM_PMU_BR_RETIRED,ARM_PMU_BR_MIS_PRED_RETIRED,ARM_PMU_STALL_FRONTEND,ARM_PMU_STALL_BACKEND,ARM_PMU_LL_CACHE_RD,ARM_PMU_LL_CACHE_MISS_RD,ARM_PMU_L1D_CACHE_MISS_RD,ARM_PMU_STALL,ARM_PMU_L1D_CACHE_RD,ARM_PMU_LE_RETIRED,ARM_PMU_LE_CANCEL,ARM_PMU_SE_CALL_S,ARM_PMU_SE_CALL_NS,ARM_PMU_MVE_INST_RETIRED,ARM_PMU_MVE_FP_RETIRED,ARM_PMU_MVE_FP_HP_RETIRED,ARM_PMU_MVE_FP_SP_RETIRED,ARM_PMU_MVE_FP_MAC_RETIRED,ARM_PMU_MVE_INT_RETIRED,ARM_PMU_MVE_INT_MAC_RETIRED,ARM_PMU_MVE_LDST_RETIRED,ARM_PMU_MVE_LD_RETIRED,ARM_PMU_MVE_ST_RETIRED,ARM_PMU_MVE_LDST_CONTIG_RETIRED,ARM_PMU_MVE_LD_CONTIG_RETIRED,ARM_PMU_MVE_ST_CONTIG_RETIRED,ARM_PMU_MVE_LDST_NONCONTIG_RETIRED,ARM_PMU_MVE_LD_NONCONTIG_RETIRED,ARM_PMU_MVE_ST_NONCONTIG_RETIRED,ARM_PMU_MVE_LDST_MULTI_RETIRED,ARM_PMU_MVE_LD_MULTI_RETIRED,ARM_PMU_MVE_ST_MULTI_RETIRED,ARM_PMU_MVE_LDST_UNALIGNED_RETIRED,ARM_PMU_MVE_LD_UNALIGNED_RETIRED,ARM_PMU_MVE_ST_UNALIGNED_RETIRED,ARM_PMU_MVE_LDST_UNALIGNED_NONCONTIG_RETIRED,ARM_PMU_MVE_VREDUCE_RETIRED,ARM_PMU_MVE_VREDUCE_FP_RETIRED ,ARM_PMU_MVE_VREDUCE_INT_RETIRED,ARM_PMU_MVE_PRED,ARM_PMU_MVE_STALL,ARM_PMU_MVE_STALL_RESOURCE,ARM_PMU_MVE_STALL_RESOURCE_MEM ,ARM_PMU_MVE_STALL_RESOURCE_FP,ARM_PMU_MVE_STALL_RESOURCE_INT ,ARM_PMU_MVE_STALL_BREAK,ARM_PMU_MVE_STALL_DEPENDENCY,ARM_PMU_ITCM_ACCESS,ARM_PMU_DTCM_ACCESS";
+let pmuCsvHeader = "Tag, uSeconds, ARM_PMU_SW_INCR,ARM_PMU_L1I_CACHE_REFILL,ARM_PMU_L1D_CACHE_REFILL,ARM_PMU_L1D_CACHE,ARM_PMU_LD_RETIRED,ARM_PMU_ST_RETIRED,ARM_PMU_INST_RETIRED,ARM_PMU_EXC_TAKEN,ARM_PMU_EXC_RETURN,ARM_PMU_PC_WRITE_RETIRED,ARM_PMU_BR_IMMED_RETIRED,ARM_PMU_BR_RETURN_RETIRED,ARM_PMU_UNALIGNED_LDST_RETIRED,ARM_PMU_CPU_CYCLES,ARM_PMU_MEM_ACCESS,ARM_PMU_L1I_CACHE,ARM_PMU_L1D_CACHE_WB,ARM_PMU_BUS_ACCESS,ARM_PMU_MEMORY_ERROR,ARM_PMU_BUS_CYCLES,ARM_PMU_CHAIN,ARM_PMU_L1D_CACHE_ALLOCATE,ARM_PMU_BR_RETIRED,ARM_PMU_BR_MIS_PRED_RETIRED,ARM_PMU_STALL_FRONTEND,ARM_PMU_STALL_BACKEND,ARM_PMU_LL_CACHE_RD,ARM_PMU_LL_CACHE_MISS_RD,ARM_PMU_L1D_CACHE_MISS_RD,ARM_PMU_STALL,ARM_PMU_L1D_CACHE_RD,ARM_PMU_LE_RETIRED,ARM_PMU_LE_CANCEL,ARM_PMU_SE_CALL_S,ARM_PMU_SE_CALL_NS,ARM_PMU_MVE_INST_RETIRED,ARM_PMU_MVE_FP_RETIRED,ARM_PMU_MVE_FP_HP_RETIRED,ARM_PMU_MVE_FP_SP_RETIRED,ARM_PMU_MVE_FP_MAC_RETIRED,ARM_PMU_MVE_INT_RETIRED,ARM_PMU_MVE_INT_MAC_RETIRED,ARM_PMU_MVE_LDST_RETIRED,ARM_PMU_MVE_LD_RETIRED,ARM_PMU_MVE_ST_RETIRED,ARM_PMU_MVE_LDST_CONTIG_RETIRED,ARM_PMU_MVE_LD_CONTIG_RETIRED,ARM_PMU_MVE_ST_CONTIG_RETIRED,ARM_PMU_MVE_LDST_NONCONTIG_RETIRED,ARM_PMU_MVE_LD_NONCONTIG_RETIRED,ARM_PMU_MVE_ST_NONCONTIG_RETIRED,ARM_PMU_MVE_LDST_MULTI_RETIRED,ARM_PMU_MVE_LD_MULTI_RETIRED,ARM_PMU_MVE_ST_MULTI_RETIRED,ARM_PMU_MVE_LDST_UNALIGNED_RETIRED,ARM_PMU_MVE_LD_UNALIGNED_RETIRED,ARM_PMU_MVE_ST_UNALIGNED_RETIRED,ARM_PMU_MVE_LDST_UNALIGNED_NONCONTIG_RETIRED,ARM_PMU_MVE_VREDUCE_RETIRED,ARM_PMU_MVE_VREDUCE_FP_RETIRED ,ARM_PMU_MVE_VREDUCE_INT_RETIRED,ARM_PMU_MVE_PRED,ARM_PMU_MVE_STALL,ARM_PMU_MVE_STALL_RESOURCE,ARM_PMU_MVE_STALL_RESOURCE_MEM ,ARM_PMU_MVE_STALL_RESOURCE_FP,ARM_PMU_MVE_STALL_RESOURCE_INT ,ARM_PMU_MVE_STALL_BREAK,ARM_PMU_MVE_STALL_DEPENDENCY,ARM_PMU_ITCM_ACCESS,ARM_PMU_DTCM_ACCESS";
+serial.Port.prototype.requestPmuCsv = async function() {
+    console.log('Requesting PMU CSV from firmware...');
+    const header = new Uint8Array(13);
+    const view = new DataView(header.buffer);
+    view.setUint32(0, 0, true);
+    view.setUint8(4, 5); // CHUNK_CMD_PMU_CSV
+    view.setUint32(5, 0, true);
+    view.setUint32(9, 1, true);
+    const frameHeader = new Uint8Array([0x00, 0x02]);
+    const packet = new Uint8Array(frameHeader.length + header.length);
+    packet.set(frameHeader, 0);
+    packet.set(header, frameHeader.length);
+    let pmuCsvRows = [];
+    let pmuCsvTotalChunks = null;
+    let pmuCsvExpectedChunk = 0;
+    pmuCsvRows[0] = pmuCsvHeader;
+    this.addListener(((data) => {
+        console.log('[PMU CSV Listener] Received data:', data, 'length:', data ? data.byteLength : 0);
+        if (!data || data.byteLength < 13) return false;
+        const dataArray = new Uint8Array(data.buffer);
+        if (dataArray[0] !== 0x00 || dataArray[1] !== 0x02) return false;
+        const view = new DataView(dataArray.buffer, dataArray.byteOffset + 2, 13);
+        const command = view.getUint8(4);
+        const chunk_id = view.getUint32(5, true);
+        const total_chunks = view.getUint32(9, true);
+        console.log('Received command:', command, 'chunk_id:', chunk_id, 'total_chunks:', total_chunks);
+        if (command === 0x05) {
+            const tag = new TextDecoder().decode(dataArray.subarray(15, 35));
+            const elapsed_us = dataArray.subarray(35, 39);
+            console.log('Tag:', tag, 'Elapsed us:', elapsed_us);
+            const elapsed_us_view = new DataView(elapsed_us.buffer, elapsed_us.byteOffset, elapsed_us.byteLength);
+            const elapsed_us_value = elapsed_us_view.getUint32(0, true);
+            console.log('Elapsed us value:', elapsed_us_value);
+            const payload = dataArray.subarray(39);
+            const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+            const numU32 = payload.byteLength / 4;
+            const values = [];
+
+            // Add tag and elapsed_us to the values
+            values.push(tag);
+            values.push(elapsed_us);
+
+            for (let i = 0; i < numU32; i++) {
+                values.push(view.getUint32(i * 4, true)); // little-endian
+            }
+            const csvRow = values.join(',');
+            if (chunk_id === pmuCsvExpectedChunk) {
+                pmuCsvRows[chunk_id+1] = csvRow;
+                pmuCsvTotalChunks = total_chunks;
+                pmuCsvExpectedChunk++;
+            }
+            // Always ACK, even if duplicate
+            console.log('Sending ACK for chunk', chunk_id);
+            this.sendAck(chunk_id);
+            if (
+                pmuCsvRows.length === pmuCsvTotalChunks+1 &&
+                pmuCsvRows.every(row => typeof row === 'string')
+            ) {
+                const csvContent = pmuCsvRows.join('\n');
+                const blob = new Blob([csvContent], {type: 'text/csv'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'pmu_stats.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                return true; // Remove this listener
+            }
+        }
+        return false;
+    }).bind(this));
+    await this.send(packet);
+    console.log('PMU CSV request sent');
+};
+
+serial.Port.prototype.sendAck = async function(chunk_id) {
+    // 13-byte protocol header, like in uploadModel
+    const header = new Uint8Array(13);
+    const view = new DataView(header.buffer);
+    view.setUint32(0, 0, true); // CRC32 not needed for ACK
+    view.setUint8(4, 2); // CHUNK_CMD_ACK
+    view.setUint32(5, chunk_id, true); // chunk_id as uint32_t, LE
+    view.setUint32(9, 1, true); // total_chunks = 1
+
+    // 2-byte frame header
+    const frameHeader = new Uint8Array([0x00, 0x02]);
+    const fullPacket = new Uint8Array(frameHeader.length + header.length);
+    fullPacket.set(frameHeader, 0);
+    fullPacket.set(header, frameHeader.length);
+    console.log('[ACK] Sending ACK for chunk', chunk_id, Array.from(fullPacket).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+    await this.send(fullPacket);
 };
 
 // Main upload function
