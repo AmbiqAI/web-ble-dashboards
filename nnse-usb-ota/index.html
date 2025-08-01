@@ -349,6 +349,7 @@
                         <button id="uploadModelButton" class="action-button" disabled>Upload Model</button>
                         <!-- <button id="configureModelButton" class="action-button">Configure Model</button> -->
                         <button id="getStatsButton" class="action-button">Get Performance Stats</button>
+                        <button id="modelExplorerButton" class="action-button">Model Explorer</button>
                     </div>
                     <div id="uploadProgress" class="progress-container">
                         <div class="progress-bar">
@@ -432,6 +433,7 @@
     const exportStatsButton = document.getElementById('exportStatsButton');
     const testPacketButton = document.getElementById('testPacketButton');
     const pingButton = document.getElementById('pingButton');
+    const modelExplorerButton = document.getElementById('modelExplorerButton');
 
     // Global variables
     let currentModelData = null;
@@ -892,6 +894,24 @@
     snackBar = document.getElementById("snackbar");
     snackBar.style.visibility = "hidden";
   }
+
+// Model Explorer Button
+modelExplorerButton.addEventListener('click', async () => {
+  if (!currentModelData) {
+    snack('Please upload a model first', 1);
+    return;
+  }
+
+  // Read the model as an ArrayBuffer
+  const modelBuffer = await currentModelData.arrayBuffer();
+  const blob = new Blob([modelBuffer], { type: 'application/octet-stream' });
+  const blobUrl = URL.createObjectURL(blob);
+
+  // Open new window with URL-encoded blob reference
+  const explorerUrl = `model-explorer.html?modelUrl=${encodeURIComponent(blobUrl)}&filename=${encodeURIComponent(currentModelData.name)}`;
+  window.open(explorerUrl, '_blank');
+});
+
 
 </script>
 

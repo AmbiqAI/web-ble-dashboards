@@ -1,0 +1,141 @@
+<!--
+@license
+Copyright 2025 The Model Explorer Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Model Explorer Visualizer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Import the package to register the custom element -->
+  <!-- <script src="https://cdn.jsdelivr.net/npm/ai-edge-model-explorer-visualizer@latest/dist/main_browser.min.js"></script> -->
+  <script src="https://unpkg.com/ai-edge-model-explorer-visualizer@latest"></script>
+
+  <style>
+    body, html {
+      height: 100%;
+      overflow: hidden;
+      padding: 0;
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+    .header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: #4285f4;
+      color: white;
+      padding: 10px 20px;
+      text-align: center;
+      z-index: 1000;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .content {
+      position: fixed;
+      top: 50px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+    }
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #666;
+      font-size: 16px;
+    }
+    .error {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #d32f2f;
+      font-size: 16px;
+      text-align: center;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Model Explorer Visualizer</h1>
+  </div>
+  
+  <div class="content" id="content">
+    <div class="loading">
+      <div>
+        <h3>Loading Model Explorer...</h3>
+        <p>Please wait while we prepare the visualizer.</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./parse-and-launch.js"></script>
+
+
+  <!-- <script>
+    
+  modelExplorer.assetFilesBaseUrl = './static_files';
+  modelExplorer.workerScriptPath = './worker.js';
+
+  async function initializeVisualizer() {
+    const content = document.getElementById('content');
+    const urlParams = new URLSearchParams(window.location.search);
+    const modelUrl = urlParams.get('modelUrl');
+    const filename = urlParams.get('filename') || 'model.tflite';
+
+    if (!modelUrl) {
+        content.innerHTML = `<div class="error"><h3>Error</h3><p>No model URL provided.</p></div>`;
+        return;
+    }
+
+    try {
+        
+        const visualizer = document.createElement('model-explorer-visualizer');
+        visualizer.modelUrl = modelUrl;
+        visualizer.modelFormat = 'tflite';
+        visualizer.modelName = filename;
+
+        console.log('Model visualizer initialized with:', modelUrl);
+        console.log('Model format:', 'tflite');
+        console.log('Model name:', filename);
+
+        content.innerHTML = '';
+        content.appendChild(visualizer);
+
+        console.log('Model visualizer initialized with:', modelUrl);
+    } catch (error) {
+        console.error('Error initializing visualizer:', error);
+        content.innerHTML = `<div class="error"><h3>Error Initializing Visualizer</h3><p>${error.message}</p></div>`;
+    }
+    }
+
+
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('Model Explorer page loaded');
+        setTimeout(() => initializeVisualizer(), 500);
+    });
+    </script> -->
+
+</body>
+</html> 

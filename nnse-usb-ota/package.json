@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "flatbuffers": "^25.2.10"
+  }
+}
