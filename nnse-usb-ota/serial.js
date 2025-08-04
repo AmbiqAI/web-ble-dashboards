@@ -205,7 +205,7 @@ serial.Port.prototype.requestStats = async function() {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             reject(new Error('Stats request timeout'));
-        }, 100000); // 10 second timeout
+        }, 30000); // 30 second timeout
 
         this.addListener((data) => {
             console.log('Stats response received:', data.byteLength, 'bytes');
@@ -213,16 +213,29 @@ serial.Port.prototype.requestStats = async function() {
                 const dataArray = new Uint8Array(data.buffer);
                 console.log('Stats response data:', Array.from(dataArray).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
                 
-                if (data.byteLength === 8) {
-                    // This is the expected stats response (8 bytes: 4 bytes cycles + 4 bytes status)
+                if (data.byteLength === 16) {
+                    // This is the expected stats response (16 bytes: 4 bytes cycles + 4 bytes status + 4 bytes num_layers + 4 bytes arena_used)
+                    const view = new DataView(data.buffer);
+                    const cycles = view.getUint32(0, true); // Little-endian
+                    const status = view.getUint32(4, true); // Little-endian
+                    const num_layers = view.getUint32(8, true); // Little-endian
+                    const arena_used = view.getUint32(12, true); // Little-endian
+                    
+                    console.log('Parsed stats response:', { cycles, status, num_layers, arena_used });
+                    
+                    clearTimeout(timeout);
+                    resolve({ cycles, status, num_layers, arena_used });
+                    return true; // Remove this listener
+                } else if (data.byteLength === 8) {
+                    // Legacy 8-byte response (for backward compatibility)
                     const view = new DataView(data.buffer);
                     const cycles = view.getUint32(0, true); // Little-endian
                     const status = view.getUint32(4, true); // Little-endian
                     
-                    console.log('Parsed stats response:', { cycles, status });
+                    console.log('Parsed legacy stats response:', { cycles, status });
                     
                     clearTimeout(timeout);
-                    resolve({ cycles, status });
+                    resolve({ cycles, status, num_layers: 0, arena_used: 0 });
                     return true; // Remove this listener
                 } else if (data.byteLength === 5) {
                     // Check if this is a "RECV" message (which might indicate the command was received)
@@ -265,67 +278,73 @@ serial.Port.prototype.requestPmuCsv = async function() {
     let pmuCsvTotalChunks = null;
     let pmuCsvExpectedChunk = 0;
     pmuCsvRows[0] = pmuCsvHeader;
-    this.addListener(((data) => {
-        console.log('[PMU CSV Listener] Received data:', data, 'length:', data ? data.byteLength : 0);
-        if (!data || data.byteLength < 13) return false;
-        const dataArray = new Uint8Array(data.buffer);
-        if (dataArray[0] !== 0x00 || dataArray[1] !== 0x02) return false;
-        const view = new DataView(dataArray.buffer, dataArray.byteOffset + 2, 13);
-        const command = view.getUint8(4);
-        const chunk_id = view.getUint32(5, true);
-        const total_chunks = view.getUint32(9, true);
-        console.log('Received command:', command, 'chunk_id:', chunk_id, 'total_chunks:', total_chunks);
-        if (command === 0x05) {
-            const tag = new TextDecoder().decode(dataArray.subarray(15, 35));
-            const elapsed_us = dataArray.subarray(35, 39);
-            console.log('Tag:', tag, 'Elapsed us:', elapsed_us);
-            const elapsed_us_view = new DataView(elapsed_us.buffer, elapsed_us.byteOffset, elapsed_us.byteLength);
-            const elapsed_us_value = elapsed_us_view.getUint16(0, true);
-            console.log('Elapsed us value:', elapsed_us_value);
-            const payload = dataArray.subarray(39);
-            const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
-            const numU32 = payload.byteLength / 4;
-            const values = [];
+    
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new Error('PMU CSV request timeout'));
+        }, 30000); // 30 second timeout
+        
+        this.addListener(((data) => {
+            console.log('[PMU CSV Listener] Received data:', data, 'length:', data ? data.byteLength : 0);
+            if (!data || data.byteLength < 13) return false;
+            const dataArray = new Uint8Array(data.buffer);
+            if (dataArray[0] !== 0x00 || dataArray[1] !== 0x02) return false;
+            const view = new DataView(dataArray.buffer, dataArray.byteOffset + 2, 13);
+            const command = view.getUint8(4);
+            const chunk_id = view.getUint32(5, true);
+            const total_chunks = view.getUint32(9, true);
+            console.log('Received command:', command, 'chunk_id:', chunk_id, 'total_chunks:', total_chunks);
+            if (command === 0x05) {
+                const tag = new TextDecoder().decode(dataArray.subarray(15, 35));
+                const elapsed_us = dataArray.subarray(35, 39);
+                console.log('Tag:', tag, 'Elapsed us:', elapsed_us);
+                const elapsed_us_view = new DataView(elapsed_us.buffer, elapsed_us.byteOffset, elapsed_us.byteLength);
+                const elapsed_us_value = elapsed_us_view.getUint16(0, true);
+                console.log('Elapsed us value:', elapsed_us_value);
+                const payload = dataArray.subarray(39);
+                const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+                const numU32 = payload.byteLength / 4;
+                const values = [];
 
-            // Add tag and elapsed_us to the values
-            values.push(tag);
-            values.push(elapsed_us_value);
+                // Add tag and elapsed_us to the values
+                values.push(tag);
+                values.push(elapsed_us_value);
 
-            for (let i = 0; i < numU32; i++) {
-                values.push(view.getUint32(i * 4, true)); // little-endian
-                console.log(i+1, ' Value:', values[i+2]);
+                for (let i = 0; i < numU32; i++) {
+                    values.push(view.getUint32(i * 4, true)); // little-endian
+                    console.log(i+1, ' Value:', values[i+2]);
+                }
+                console.log(values);
+                const csvRow = values.join(',');
+                if (chunk_id === pmuCsvExpectedChunk) {
+                    pmuCsvRows[chunk_id+1] = csvRow;
+                    pmuCsvTotalChunks = total_chunks;
+                    pmuCsvExpectedChunk++;
+                }
+                // Always ACK, even if duplicate
+                console.log('Sending ACK for chunk', chunk_id);
+                this.sendAck(chunk_id);
+                if (
+                    pmuCsvRows.length === pmuCsvTotalChunks+1 &&
+                    pmuCsvRows.every(row => typeof row === 'string')
+                ) {
+                    const csvContent = pmuCsvRows.join('\n');
+                    
+                    // Save to localStorage
+                    localStorage.setItem('pmuCsvData', csvContent);
+                    console.log('PMU CSV data saved to localStorage');
+                    
+                    clearTimeout(timeout);
+                    resolve({ csvContent, totalRows: pmuCsvRows.length - 1 });
+                    return true; // Remove this listener
+                }
             }
-            console.log(values);
-            const csvRow = values.join(',');
-            if (chunk_id === pmuCsvExpectedChunk) {
-                pmuCsvRows[chunk_id+1] = csvRow;
-                pmuCsvTotalChunks = total_chunks;
-                pmuCsvExpectedChunk++;
-            }
-            // Always ACK, even if duplicate
-            console.log('Sending ACK for chunk', chunk_id);
-            this.sendAck(chunk_id);
-            if (
-                pmuCsvRows.length === pmuCsvTotalChunks+1 &&
-                pmuCsvRows.every(row => typeof row === 'string')
-            ) {
-                const csvContent = pmuCsvRows.join('\n');
-                const blob = new Blob([csvContent], {type: 'text/csv'});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'pmu_stats.csv';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                return true; // Remove this listener
-            }
-        }
-        return false;
-    }).bind(this));
-    await this.send(packet);
-    console.log('PMU CSV request sent');
+            return false;
+        }).bind(this));
+        
+        // Send the request
+        this.send(packet).catch(reject);
+    });
 };
 
 serial.Port.prototype.sendAck = async function(chunk_id) {
@@ -344,6 +363,33 @@ serial.Port.prototype.sendAck = async function(chunk_id) {
     fullPacket.set(header, frameHeader.length);
     console.log('[ACK] Sending ACK for chunk', chunk_id, Array.from(fullPacket).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
     await this.send(fullPacket);
+};
+
+// Download CSV from localStorage
+serial.Port.prototype.downloadPmuCsvFromLocalStorage = async function() {
+    console.log('Downloading PMU CSV from localStorage...');
+    
+    // Get CSV content from localStorage
+    const csvContent = localStorage.getItem('pmuCsvData');
+    if (!csvContent) {
+        throw new Error('No PMU CSV data found in localStorage. Click "Get Performance Stats" first to collect data.');
+    }
+    
+    console.log('CSV content found, length:', csvContent.length);
+    
+    // Download the CSV file
+    const blob = new Blob([csvContent], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'pmu_stats.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    console.log('PMU CSV downloaded successfully');
+    return { csvContent, totalRows: csvContent.split('\n').length - 1 };
 };
 
 // Main upload function

@@ -296,7 +296,7 @@
                 <div class="tab-container">
                     <div class="tab active" onclick="switchTab('upload')">Model Upload</div>
                     <!-- <div class="tab" onclick="switchTab('config')">Configuration</div> -->
-                    <div class="tab" onclick="switchTab('validation')">Validation</div>
+                    <!-- <div class="tab" onclick="switchTab('validation')">Validation</div> -->
                     <div class="tab" onclick="switchTab('stats')">Performance Stats</div>
                 </div>
 
@@ -360,7 +360,7 @@
                 </div>
 
                 <!-- Validation Tab -->
-                <div id="validation-tab" class="tab-content">
+                <!-- <div id="validation-tab" class="tab-content">
                     <div class="config-row">
                         <div class="config-label">Validation Status:</div>
                         <div id="validationStatus" style="color: #999;">Not started</div>
@@ -373,14 +373,29 @@
                         <div class="label" style="font-size: 14px; margin-bottom: 10px;">Validation Results:</div>
                         <div id="validationOutput" style="background-color: #222; padding: 10px; border-radius: 3px; font-size: 11px; max-height: 200px; overflow-y: auto;"></div>
                     </div>
-                </div>
+                </div> -->
 
                 <!-- Performance Stats Tab -->
                 <div id="stats-tab" class="tab-content">
                     <div class="config-row">
-                        <button id="refreshStatsButton" class="action-button">Refresh Stats</button>
+                        <button id="refreshStatsButton" class="action-button">Export JSON Stats</button>
                         <button id="exportStatsButton" class="action-button">Export CSV</button>
                     </div>
+                    
+                    <!-- PMU Attribute Selection -->
+                    <div class="config-row" style="margin-top: 15px;">
+                        <!-- <div class="config-label">PMU Attributes for JSON Export:</div> -->
+                        <div style="margin-top: 5px;">
+                            <label style="display: block; margin-bottom: 5px;">
+                                <input type="checkbox" id="selectAllAttributes" style="margin-right: 5px;">
+                                <strong>Toggle All Attributes</strong>
+                            </label>
+                            <div id="pmuAttributesContainer" style="max-height: 200px; overflow-y: auto; border: 1px solid #444; padding: 10px; background-color: #222;">
+                                <!-- PMU attributes will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div id="statsContainer" style="margin-top: 10px;">
                         <div id="statsSummary" style="background-color: #222; padding: 10px; border-radius: 3px; margin-bottom: 10px; display: none;">
                             <div class="label" style="font-size: 14px; margin-bottom: 10px;">Performance Summary:</div>
@@ -392,7 +407,7 @@
                                     <tr>
                                         <th>Layer</th>
                                         <th>Tag</th>
-                                        <th>Time (μs)</th>
+                                        <th>Time (us)</th>
                                         <th>MACs</th>
                                         <th>Cycles</th>
                                     </tr>
@@ -427,8 +442,7 @@
     // Configuration elements
     // const configureModelButton = document.getElementById('configureModelButton');
     const getStatsButton = document.getElementById('getStatsButton');
-    const startValidationButton = document.getElementById('startValidationButton');
-    const stopValidationButton = document.getElementById('stopValidationButton');
+
     const refreshStatsButton = document.getElementById('refreshStatsButton');
     const exportStatsButton = document.getElementById('exportStatsButton');
     const testPacketButton = document.getElementById('testPacketButton');
@@ -638,7 +652,6 @@
 
     // Get performance stats
     getStatsButton.addEventListener('click', getPerformanceStats);
-    refreshStatsButton.addEventListener('click', getPerformanceStats);
 
     async function getPerformanceStats() {
         if (!port) {
@@ -661,10 +674,21 @@
             getStatsButton.disabled = true;
             getStatsButton.textContent = 'Requesting...';
             
+            // First get basic performance stats
             const stats = await port.requestStats();
             console.log('Performance stats received:', stats);
             displayPerformanceStats(stats);
-            snack('Performance stats received', 0);
+            
+            // Then collect PMU CSV data for model explorer
+            console.log('Collecting PMU CSV data for model explorer...');
+            try {
+                const pmuData = await port.requestPmuCsv();
+                console.log('PMU data collected and saved to localStorage:', pmuData);
+                snack('Performance stats and PMU data collected', 0);
+            } catch (pmuError) {
+                console.warn('PMU data collection failed:', pmuError);
+                snack('Performance stats received, but PMU data failed', 1);
+            }
         } catch (error) {
             console.error('Failed to get stats:', error);
             snack('Failed to get stats: ' + error.message, 1);
@@ -686,6 +710,8 @@
         summaryContent.innerHTML = `
             <div><strong>Inference Cycles:</strong> ${stats.cycles.toLocaleString()}</div>
             <div><strong>Status:</strong> ${stats.status === 0 ? 'Success' : 'Error'}</div>
+            <div><strong>Number of Layers:</strong> ${stats.num_layers || 'N/A'}</div>
+            <div><strong>Arena Used:</strong> ${stats.arena_used ? stats.arena_used.toLocaleString() + ' bytes' : 'N/A'}</div>
             <div><strong>Model Location:</strong> ${modelLocation}</div>
             <div><strong>Arena Location:</strong> ${arenaLocation}</div>
         `;
@@ -701,7 +727,7 @@
         row.insertCell(1).textContent = 'Model Inference';
         row.insertCell(2).textContent = stats.cycles.toLocaleString();
         row.insertCell(3).textContent = stats.status === 0 ? 'Success' : 'Error';
-        row.insertCell(4).textContent = 'N/A'; // MACs not available in this simple version
+        row.insertCell(4).textContent = stats.num_layers || 'N/A';
 
         document.getElementById('statsTable').style.display = 'block';
         
@@ -709,9 +735,459 @@
         console.log('Performance Stats Displayed:', {
             cycles: stats.cycles,
             status: stats.status,
+            num_layers: stats.num_layers,
+            arena_used: stats.arena_used,
             modelLocation: modelLocation,
             arenaLocation: arenaLocation
         });
+    }
+
+    // Convert PMU CSV data to multiple JSON files for Model Explorer
+    function convertPmuCsvToMultipleJson(selectedAttributes) {
+        console.log('Converting PMU CSV data to multiple JSON files for attributes:', selectedAttributes);
+        
+        // Get CSV content from localStorage
+        const csvContent = localStorage.getItem('pmuCsvData');
+        if (!csvContent) {
+            console.error('No PMU CSV data found in localStorage');
+            return null;
+        }
+        
+        console.log('CSV content length:', csvContent.length);
+        
+        const lines = csvContent.trim().split('\n');
+        console.log('Number of CSV lines:', lines.length);
+        
+        if (lines.length < 2) {
+            console.error('CSV data is incomplete');
+            return null;
+        }
+        
+        const headers = lines[0].split(',').map(h => h.trim());
+        console.log('CSV headers:', headers);
+        
+        const jsonFiles = [];
+        
+        // Create a JSON file for each selected attribute
+        selectedAttributes.forEach(attribute => {
+            console.log(`Creating JSON for attribute: ${attribute}`);
+            
+            // Find the column index for this attribute
+            const columnIndex = headers.findIndex(h => h === attribute);
+            if (columnIndex === -1) {
+                console.warn(`Attribute ${attribute} not found in CSV headers`);
+                return;
+            }
+            
+            // Find min and max values for normalization (for color coding only)
+            let minValue = Infinity;
+            let maxValue = -Infinity;
+            
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                const value = parseFloat(values[columnIndex]) || 0;
+                minValue = Math.min(minValue, value);
+                maxValue = Math.max(maxValue, value);
+            }
+            
+            const valueRange = maxValue - minValue;
+            
+            // Create JSON structure for this attribute
+            const jsonData = {
+                "main": {
+                    "results": {},
+                    "thresholds": [
+                        {
+                            "value": minValue + (valueRange * 0.3),
+                            "bgColor": "#44FF44",
+                            "textColor": "#000000"
+                        },
+                        {
+                            "value": minValue + (valueRange * 0.6),
+                            "bgColor": "#FFCC00",
+                            "textColor": "#000000"
+                        },
+                        {
+                            "value": minValue + (valueRange * 0.9),
+                            "bgColor": "#FF4444",
+                            "textColor": "#FFFFFF"
+                        }
+                    ],
+                    "gradient": [
+                        {
+                            "stop": minValue,
+                            "bgColor": "#44FF44"
+                        },
+                        {
+                            "stop": minValue + (valueRange * 0.5),
+                            "bgColor": "#FFCC00"
+                        },
+                        {
+                            "stop": maxValue,
+                            "bgColor": "#FF4444"
+                        }
+                    ]
+                }
+            };
+            
+            // Process each data row (skip header)
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                const eventNumber = (i - 1).toString(); // Event number starts from 0
+                const rawValue = parseFloat(values[columnIndex]) || 0;
+                
+                // Use normalized value only for color determination
+                const normalizedValue = valueRange > 0 ? (rawValue - minValue) / valueRange : 0;
+                
+                console.log(`Event ${eventNumber}: ${attribute}=${rawValue}, normalized=${normalizedValue}`);
+                
+                // Determine colors based on normalized value
+                let bgColor, textColor;
+                if (normalizedValue < 0.3) {
+                    bgColor = "#44FF44"; // Green for low values
+                    textColor = "#000000";
+                } else if (normalizedValue < 0.6) {
+                    bgColor = "#FFCC00"; // Yellow for medium values
+                    textColor = "#000000";
+                } else {
+                    bgColor = "#FF4444"; // Red for high values
+                    textColor = "#FFFFFF";
+                }
+                
+                // Add node data to results with ORIGINAL raw value
+                jsonData.main.results[eventNumber] = {
+                    value: rawValue, // Use original value, not normalized
+                    bgColor: bgColor,
+                    textColor: textColor
+                };
+            }
+            
+            // Create filename based on attribute name
+            const filename = `${attribute.toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`;
+            
+            jsonFiles.push({
+                filename: filename,
+                data: jsonData,
+                attribute: attribute,
+                minValue: minValue,
+                maxValue: maxValue
+            });
+            
+            console.log(`Created JSON for ${attribute}: ${Object.keys(jsonData.main.results).length} results`);
+        });
+        
+        console.log(`Created ${jsonFiles.length} JSON files`);
+        return jsonFiles;
+    }
+
+    // Get selected PMU attributes
+    function getSelectedPmuAttributes() {
+        const checkboxes = document.querySelectorAll('#pmuAttributesContainer input[type="checkbox"]:checked');
+        return Array.from(checkboxes).map(cb => cb.value);
+    }
+
+    // Populate PMU attributes dropdown
+    function populatePmuAttributes() {
+        const container = document.getElementById('pmuAttributesContainer');
+        const selectAllCheckbox = document.getElementById('selectAllAttributes');
+        
+        // PMU attributes from the CSV header (excluding Tag)
+        const pmuAttributes = [
+            'uSeconds',
+            'ARM_PMU_SW_INCR',
+            'ARM_PMU_L1I_CACHE_REFILL',
+            'ARM_PMU_L1D_CACHE_REFILL',
+            'ARM_PMU_L1D_CACHE',
+            'ARM_PMU_LD_RETIRED',
+            'ARM_PMU_ST_RETIRED',
+            'ARM_PMU_INST_RETIRED',
+            'ARM_PMU_EXC_TAKEN',
+            'ARM_PMU_EXC_RETURN',
+            'ARM_PMU_PC_WRITE_RETIRED',
+            'ARM_PMU_BR_IMMED_RETIRED',
+            'ARM_PMU_BR_RETURN_RETIRED',
+            'ARM_PMU_UNALIGNED_LDST_RETIRED',
+            'ARM_PMU_CPU_CYCLES',
+            'ARM_PMU_MEM_ACCESS',
+            'ARM_PMU_L1I_CACHE',
+            'ARM_PMU_L1D_CACHE_WB',
+            'ARM_PMU_BUS_ACCESS',
+            'ARM_PMU_MEMORY_ERROR',
+            'ARM_PMU_BUS_CYCLES',
+            'ARM_PMU_CHAIN',
+            'ARM_PMU_L1D_CACHE_ALLOCATE',
+            'ARM_PMU_BR_RETIRED',
+            'ARM_PMU_BR_MIS_PRED_RETIRED',
+            'ARM_PMU_STALL_FRONTEND',
+            'ARM_PMU_STALL_BACKEND',
+            'ARM_PMU_LL_CACHE_RD',
+            'ARM_PMU_LL_CACHE_MISS_RD',
+            'ARM_PMU_L1D_CACHE_MISS_RD',
+            'ARM_PMU_STALL',
+            'ARM_PMU_L1D_CACHE_RD',
+            'ARM_PMU_LE_RETIRED',
+            'ARM_PMU_LE_CANCEL',
+            'ARM_PMU_SE_CALL_S',
+            'ARM_PMU_SE_CALL_NS',
+            'ARM_PMU_MVE_INST_RETIRED',
+            'ARM_PMU_MVE_FP_RETIRED',
+            'ARM_PMU_MVE_FP_HP_RETIRED',
+            'ARM_PMU_MVE_FP_SP_RETIRED',
+            'ARM_PMU_MVE_FP_MAC_RETIRED',
+            'ARM_PMU_MVE_INT_RETIRED',
+            'ARM_PMU_MVE_INT_MAC_RETIRED',
+            'ARM_PMU_MVE_LDST_RETIRED',
+            'ARM_PMU_MVE_LD_RETIRED',
+            'ARM_PMU_MVE_ST_RETIRED',
+            'ARM_PMU_MVE_LDST_CONTIG_RETIRED',
+            'ARM_PMU_MVE_LD_CONTIG_RETIRED',
+            'ARM_PMU_MVE_ST_CONTIG_RETIRED',
+            'ARM_PMU_MVE_LDST_NONCONTIG_RETIRED',
+            'ARM_PMU_MVE_LD_NONCONTIG_RETIRED',
+            'ARM_PMU_MVE_ST_NONCONTIG_RETIRED',
+            'ARM_PMU_MVE_LDST_MULTI_RETIRED',
+            'ARM_PMU_MVE_LD_MULTI_RETIRED',
+            'ARM_PMU_MVE_ST_MULTI_RETIRED',
+            'ARM_PMU_MVE_LDST_UNALIGNED_RETIRED',
+            'ARM_PMU_MVE_LD_UNALIGNED_RETIRED',
+            'ARM_PMU_MVE_ST_UNALIGNED_RETIRED',
+            'ARM_PMU_MVE_LDST_UNALIGNED_NONCONTIG_RETIRED',
+            'ARM_PMU_MVE_VREDUCE_RETIRED',
+            'ARM_PMU_MVE_VREDUCE_FP_RETIRED',
+            'ARM_PMU_MVE_VREDUCE_INT_RETIRED',
+            'ARM_PMU_MVE_PRED',
+            'ARM_PMU_MVE_STALL',
+            'ARM_PMU_MVE_STALL_RESOURCE',
+            'ARM_PMU_MVE_STALL_RESOURCE_MEM',
+            'ARM_PMU_MVE_STALL_RESOURCE_FP',
+            'ARM_PMU_MVE_STALL_RESOURCE_INT',
+            'ARM_PMU_MVE_STALL_BREAK',
+            'ARM_PMU_MVE_STALL_DEPENDENCY',
+            'ARM_PMU_ITCM_ACCESS',
+            'ARM_PMU_DTCM_ACCESS'
+        ];
+        
+        container.innerHTML = '';
+        
+        pmuAttributes.forEach(attr => {
+            const label = document.createElement('label');
+            label.style.display = 'block';
+            label.style.marginBottom = '3px';
+            label.style.fontSize = '12px';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = attr;
+            checkbox.style.marginRight = '5px';
+            
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(attr));
+            container.appendChild(label);
+        });
+        
+        // Handle "Select All" checkbox
+        selectAllCheckbox.addEventListener('change', function() {
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = this.checked;
+            });
+        });
+        
+        // Handle individual checkboxes to update "Select All"
+        container.addEventListener('change', function(e) {
+            if (e.target.type === 'checkbox') {
+                const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+                const checkedBoxes = container.querySelectorAll('input[type="checkbox"]:checked');
+                selectAllCheckbox.checked = checkboxes.length === checkedBoxes.length;
+            }
+        });
+    }
+
+    // Convert PMU CSV data to JSON format for Model Explorer
+    function convertPmuCsvToJson() {
+        console.log('Converting PMU CSV data to JSON format...');
+        
+        // Get CSV content from localStorage
+        const csvContent = localStorage.getItem('pmuCsvData');
+        if (!csvContent) {
+            console.error('No PMU CSV data found in localStorage');
+            return null;
+        }
+        
+        console.log('CSV content length:', csvContent.length);
+        console.log('First 200 chars of CSV:', csvContent.substring(0, 200));
+        
+        const lines = csvContent.trim().split('\n');
+        console.log('Number of CSV lines:', lines.length);
+        
+        if (lines.length < 2) {
+            console.error('CSV data is incomplete');
+            return null;
+        }
+        
+        const headers = lines[0].split(',').map(h => h.trim());
+        console.log('CSV headers:', headers);
+        
+        // Create JSON structure
+        const jsonData = {
+            "main": {
+                "results": {},
+                "thresholds": [
+                    {
+                        "value": 0.3,
+                        "bgColor": "#44FF44",
+                        "textColor": "#000000"
+                    },
+                    {
+                        "value": 0.6,
+                        "bgColor": "#FFCC00",
+                        "textColor": "#000000"
+                    },
+                    {
+                        "value": 0.9,
+                        "bgColor": "#FF4444",
+                        "textColor": "#FFFFFF"
+                    }
+                ],
+                "gradient": [
+                    {
+                        "stop": 0.0,
+                        "bgColor": "#44FF44"
+                    },
+                    {
+                        "stop": 0.5,
+                        "bgColor": "#FFCC00"
+                    },
+                    {
+                        "stop": 1.0,
+                        "bgColor": "#FF4444"
+                    }
+                ]
+            }
+        };
+        
+        // Process each data row (skip header)
+        for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim());
+            const eventNumber = (i - 1).toString(); // Event number starts from 0
+            
+            console.log(`Processing row ${i}, event ${eventNumber}, values:`, values);
+            
+            // Create object with header-value pairs
+            const rowData = {};
+            headers.forEach((header, index) => {
+                const value = values[index];
+                // Try to convert to number if possible
+                const numValue = parseFloat(value);
+                rowData[header] = isNaN(numValue) ? value : numValue;
+            });
+            
+            // Calculate performance score based on CPU cycles (normalized to 0-1)
+            const cpuCycles = rowData['ARM_PMU_CPU_CYCLES'] || 0;
+            const maxCycles = 1000000; // Assume 1M cycles as max for normalization
+            const performanceScore = Math.min(cpuCycles / maxCycles, 1.0);
+            
+            console.log(`Event ${eventNumber}: cpuCycles=${cpuCycles}, performanceScore=${performanceScore}`);
+            
+            // Determine colors based on performance score
+            let bgColor, textColor;
+            if (performanceScore < 0.3) {
+                bgColor = "#44FF44"; // Green for low cycles
+                textColor = "#000000";
+            } else if (performanceScore < 0.6) {
+                bgColor = "#FFCC00"; // Yellow for medium cycles
+                textColor = "#000000";
+            } else {
+                bgColor = "#FF4444"; // Red for high cycles
+                textColor = "#FFFFFF";
+            }
+            
+            // Add node data to results
+            jsonData.main.results[eventNumber] = {
+                value: performanceScore,
+                bgColor: bgColor,
+                textColor: textColor,
+                // Include all CSV data as additional properties
+                tag: rowData['Tag'] || '',
+                uSeconds: rowData[' uSeconds'] || 0,
+                ARM_PMU_SW_INCR: rowData['ARM_PMU_SW_INCR'] || 0,
+                ARM_PMU_L1I_CACHE_REFILL: rowData['ARM_PMU_L1I_CACHE_REFILL'] || 0,
+                ARM_PMU_L1D_CACHE_REFILL: rowData['ARM_PMU_L1D_CACHE_REFILL'] || 0,
+                ARM_PMU_L1D_CACHE: rowData['ARM_PMU_L1D_CACHE'] || 0,
+                ARM_PMU_LD_RETIRED: rowData['ARM_PMU_LD_RETIRED'] || 0,
+                ARM_PMU_ST_RETIRED: rowData['ARM_PMU_ST_RETIRED'] || 0,
+                ARM_PMU_INST_RETIRED: rowData['ARM_PMU_INST_RETIRED'] || 0,
+                ARM_PMU_EXC_TAKEN: rowData['ARM_PMU_EXC_TAKEN'] || 0,
+                ARM_PMU_EXC_RETURN: rowData['ARM_PMU_EXC_RETURN'] || 0,
+                ARM_PMU_PC_WRITE_RETIRED: rowData['ARM_PMU_PC_WRITE_RETIRED'] || 0,
+                ARM_PMU_BR_IMMED_RETIRED: rowData['ARM_PMU_BR_IMMED_RETIRED'] || 0,
+                ARM_PMU_BR_RETURN_RETIRED: rowData['ARM_PMU_BR_RETURN_RETIRED'] || 0,
+                ARM_PMU_UNALIGNED_LDST_RETIRED: rowData['ARM_PMU_UNALIGNED_LDST_RETIRED'] || 0,
+                ARM_PMU_CPU_CYCLES: rowData['ARM_PMU_CPU_CYCLES'] || 0,
+                ARM_PMU_MEM_ACCESS: rowData['ARM_PMU_MEM_ACCESS'] || 0,
+                ARM_PMU_L1I_CACHE: rowData['ARM_PMU_L1I_CACHE'] || 0,
+                ARM_PMU_L1D_CACHE_WB: rowData['ARM_PMU_L1D_CACHE_WB'] || 0,
+                ARM_PMU_BUS_ACCESS: rowData['ARM_PMU_BUS_ACCESS'] || 0,
+                ARM_PMU_MEMORY_ERROR: rowData['ARM_PMU_MEMORY_ERROR'] || 0,
+                ARM_PMU_BUS_CYCLES: rowData['ARM_PMU_BUS_CYCLES'] || 0,
+                ARM_PMU_CHAIN: rowData['ARM_PMU_CHAIN'] || 0,
+                ARM_PMU_L1D_CACHE_ALLOCATE: rowData['ARM_PMU_L1D_CACHE_ALLOCATE'] || 0,
+                ARM_PMU_BR_RETIRED: rowData['ARM_PMU_BR_RETIRED'] || 0,
+                ARM_PMU_BR_MIS_PRED_RETIRED: rowData['ARM_PMU_BR_MIS_PRED_RETIRED'] || 0,
+                ARM_PMU_STALL_FRONTEND: rowData['ARM_PMU_STALL_FRONTEND'] || 0,
+                ARM_PMU_STALL_BACKEND: rowData['ARM_PMU_STALL_BACKEND'] || 0,
+                ARM_PMU_LL_CACHE_RD: rowData['ARM_PMU_LL_CACHE_RD'] || 0,
+                ARM_PMU_LL_CACHE_MISS_RD: rowData['ARM_PMU_LL_CACHE_MISS_RD'] || 0,
+                ARM_PMU_L1D_CACHE_MISS_RD: rowData['ARM_PMU_L1D_CACHE_MISS_RD'] || 0,
+                ARM_PMU_STALL: rowData['ARM_PMU_STALL'] || 0,
+                ARM_PMU_L1D_CACHE_RD: rowData['ARM_PMU_L1D_CACHE_RD'] || 0,
+                ARM_PMU_LE_RETIRED: rowData['ARM_PMU_LE_RETIRED'] || 0,
+                ARM_PMU_LE_CANCEL: rowData['ARM_PMU_LE_CANCEL'] || 0,
+                ARM_PMU_SE_CALL_S: rowData['ARM_PMU_SE_CALL_S'] || 0,
+                ARM_PMU_SE_CALL_NS: rowData['ARM_PMU_SE_CALL_NS'] || 0,
+                ARM_PMU_MVE_INST_RETIRED: rowData['ARM_PMU_MVE_INST_RETIRED'] || 0,
+                ARM_PMU_MVE_FP_RETIRED: rowData['ARM_PMU_MVE_FP_RETIRED'] || 0,
+                ARM_PMU_MVE_FP_HP_RETIRED: rowData['ARM_PMU_MVE_FP_HP_RETIRED'] || 0,
+                ARM_PMU_MVE_FP_SP_RETIRED: rowData['ARM_PMU_MVE_FP_SP_RETIRED'] || 0,
+                ARM_PMU_MVE_FP_MAC_RETIRED: rowData['ARM_PMU_MVE_FP_MAC_RETIRED'] || 0,
+                ARM_PMU_MVE_INT_RETIRED: rowData['ARM_PMU_MVE_INT_RETIRED'] || 0,
+                ARM_PMU_MVE_INT_MAC_RETIRED: rowData['ARM_PMU_MVE_INT_MAC_RETIRED'] || 0,
+                ARM_PMU_MVE_LDST_RETIRED: rowData['ARM_PMU_MVE_LDST_RETIRED'] || 0,
+                ARM_PMU_MVE_LD_RETIRED: rowData['ARM_PMU_MVE_LD_RETIRED'] || 0,
+                ARM_PMU_MVE_ST_RETIRED: rowData['ARM_PMU_MVE_ST_RETIRED'] || 0,
+                ARM_PMU_MVE_LDST_CONTIG_RETIRED: rowData['ARM_PMU_MVE_LDST_CONTIG_RETIRED'] || 0,
+                ARM_PMU_MVE_LD_CONTIG_RETIRED: rowData['ARM_PMU_MVE_LD_CONTIG_RETIRED'] || 0,
+                ARM_PMU_MVE_ST_CONTIG_RETIRED: rowData['ARM_PMU_MVE_ST_CONTIG_RETIRED'] || 0,
+                ARM_PMU_MVE_LDST_NONCONTIG_RETIRED: rowData['ARM_PMU_MVE_LDST_NONCONTIG_RETIRED'] || 0,
+                ARM_PMU_MVE_LD_NONCONTIG_RETIRED: rowData['ARM_PMU_MVE_LD_NONCONTIG_RETIRED'] || 0,
+                ARM_PMU_MVE_ST_NONCONTIG_RETIRED: rowData['ARM_PMU_MVE_ST_NONCONTIG_RETIRED'] || 0,
+                ARM_PMU_MVE_LDST_MULTI_RETIRED: rowData['ARM_PMU_MVE_LDST_MULTI_RETIRED'] || 0,
+                ARM_PMU_MVE_LD_MULTI_RETIRED: rowData['ARM_PMU_MVE_LD_MULTI_RETIRED'] || 0,
+                ARM_PMU_MVE_ST_MULTI_RETIRED: rowData['ARM_PMU_MVE_ST_MULTI_RETIRED'] || 0,
+                ARM_PMU_MVE_LDST_UNALIGNED_RETIRED: rowData['ARM_PMU_MVE_LDST_UNALIGNED_RETIRED'] || 0,
+                ARM_PMU_MVE_LD_UNALIGNED_RETIRED: rowData['ARM_PMU_MVE_LD_UNALIGNED_RETIRED'] || 0,
+                ARM_PMU_MVE_ST_UNALIGNED_RETIRED: rowData['ARM_PMU_MVE_ST_UNALIGNED_RETIRED'] || 0,
+                ARM_PMU_MVE_LDST_UNALIGNED_NONCONTIG_RETIRED: rowData['ARM_PMU_MVE_LDST_UNALIGNED_NONCONTIG_RETIRED'] || 0,
+                ARM_PMU_MVE_VREDUCE_RETIRED: rowData['ARM_PMU_MVE_VREDUCE_RETIRED'] || 0,
+                ARM_PMU_MVE_VREDUCE_FP_RETIRED: rowData['ARM_PMU_MVE_VREDUCE_FP_RETIRED'] || 0,
+                ARM_PMU_MVE_VREDUCE_INT_RETIRED: rowData['ARM_PMU_MVE_VREDUCE_INT_RETIRED'] || 0,
+                ARM_PMU_MVE_PRED: rowData['ARM_PMU_MVE_PRED'] || 0,
+                ARM_PMU_MVE_STALL: rowData['ARM_PMU_MVE_STALL'] || 0,
+                ARM_PMU_MVE_STALL_RESOURCE: rowData['ARM_PMU_MVE_STALL_RESOURCE'] || 0,
+                ARM_PMU_MVE_STALL_RESOURCE_MEM: rowData['ARM_PMU_MVE_STALL_RESOURCE_MEM'] || 0,
+                ARM_PMU_MVE_STALL_RESOURCE_FP: rowData['ARM_PMU_MVE_STALL_RESOURCE_FP'] || 0,
+                ARM_PMU_MVE_STALL_RESOURCE_INT: rowData['ARM_PMU_MVE_STALL_RESOURCE_INT'] || 0,
+                ARM_PMU_MVE_STALL_BREAK: rowData['ARM_PMU_MVE_STALL_BREAK'] || 0,
+                ARM_PMU_MVE_STALL_DEPENDENCY: rowData['ARM_PMU_MVE_STALL_DEPENDENCY'] || 0,
+                ARM_PMU_ITCM_ACCESS: rowData['ARM_PMU_ITCM_ACCESS'] || 0,
+                ARM_PMU_DTCM_ACCESS: rowData['ARM_PMU_DTCM_ACCESS'] || 0
+            };
+        }
+        
+        console.log('Final JSON data:', jsonData);
+        console.log('Number of results:', Object.keys(jsonData.main.results).length);
+        
+        return jsonData;
     }
 
     // Export stats
@@ -721,10 +1197,10 @@
             return;
         }
         try {
-            await port.requestPmuCsv();
-            snack('Requested PMU CSV from device. Download will start automatically.', 0);
+            await port.downloadPmuCsvFromLocalStorage();
+            snack('PMU CSV data downloaded successfully', 0);
         } catch (e) {
-            snack('Failed to request PMU CSV: ' + e, 1);
+            snack('Failed to download PMU CSV: ' + e.message, 1);
         }
     });
 
@@ -912,6 +1388,63 @@ modelExplorerButton.addEventListener('click', async () => {
   window.open(explorerUrl, '_blank');
 });
 
+// Export JSON stats
+refreshStatsButton.addEventListener('click', async () => {
+        if (!port) {
+            snack('Device not connected', 1);
+            return;
+        }
+        try {
+            console.log('Converting existing PMU CSV data to JSON...');
+            
+            // Show loading state
+            refreshStatsButton.disabled = true;
+            refreshStatsButton.textContent = 'Converting...';
+            
+            // Get selected attributes
+            const selectedAttributes = getSelectedPmuAttributes();
+            if (selectedAttributes.length === 0) {
+                snack('Please select at least one PMU attribute to export', 1);
+                return;
+            }
+            
+            // Convert existing CSV data to JSON format for each selected attribute
+            const jsonFiles = convertPmuCsvToMultipleJson(selectedAttributes);
+            
+            if (!jsonFiles || jsonFiles.length === 0) {
+                snack('No PMU data available. Click "Get Performance Stats" first to collect data.', 1);
+                return;
+            }
+            
+            // Download each JSON file
+            for (const jsonFile of jsonFiles) {
+                const blob = new Blob([JSON.stringify(jsonFile.data, null, 2)], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = jsonFile.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+            
+            snack(`Exported ${jsonFiles.length} JSON files successfully`, 0);
+        } catch (error) {
+            console.error('Failed to export JSON stats:', error);
+            snack('Failed to export JSON stats: ' + error.message, 1);
+        } finally {
+            // Reset button state
+            refreshStatsButton.disabled = false;
+            refreshStatsButton.textContent = 'Export JSON Stats';
+            console.log('=== JSON Stats Export Complete ===');
+        }
+    });
+
+    // Initialize PMU attributes dropdown when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        populatePmuAttributes();
+    });
 
 </script>
 
