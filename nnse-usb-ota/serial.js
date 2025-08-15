@@ -141,6 +141,11 @@ serial.Port.prototype.waitForAck = function(expectedChunk, timeoutMs = 1000) {
     return new Promise((resolve, reject) => {
         let timeout = setTimeout(() => reject('ACK timeout'), timeoutMs);
         this.addListener((data) => {
+            console.log('[ACK] Received data:', data.byteLength, 'bytes');
+            if (data && data.byteLength > 0) {
+                const dataArray = new Uint8Array(data.buffer);
+                console.log('[ACK] Data bytes:', Array.from(dataArray).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+            }
             if (data && data.byteLength === 5) {
                 const dataArray = new Uint8Array(data.buffer);
                 if (dataArray[0] === 0xAA) {
@@ -392,6 +397,888 @@ serial.Port.prototype.downloadPmuCsvFromLocalStorage = async function() {
     return { csvContent, totalRows: csvContent.split('\n').length - 1 };
 };
 
+// Helper function to get tensor shape as string
+function getTensorShape(tensor) {
+    if (!tensor || !tensor.shape) return 'unknown';
+    const shape = [];
+    for (let i = 0; i < tensor.shapeLength(); i++) {
+        shape.push(tensor.shape(i));
+    }
+    return shape.join('x');
+}
+
+// Helper function to get tensor data type name
+function getTensorTypeName(tensor) {
+    const typeNames = [
+        'FLOAT32', 'FLOAT16', 'INT32', 'UINT8', 'INT64', 'STRING', 'BOOL', 'INT16', 'COMPLEX64', 'INT8'
+    ];
+    return typeNames[tensor.type()] || 'UNKNOWN';
+}
+
+// Function to extract and log TFLM model attributes using TensorFlow.js
+serial.Port.prototype.extractModelAttributes = async function(modelBuffer) {
+    console.log('=== Extracting Model Attributes using TensorFlow.js ===');
+    
+    try {
+        // Check if TensorFlow.js is available in the global scope
+        if (typeof tf === 'undefined' || typeof tflite === 'undefined') {
+            console.log('TensorFlow.js not available, falling back to flatbuffers approach...');
+            await this.extractModelAttributesFlatbuffers(modelBuffer);
+            return;
+        }
+        
+        // Verify the model buffer
+        if (!modelBuffer || modelBuffer.length === 0) {
+            console.error('Error: Invalid model buffer');
+            return;
+        }
+        
+        // Create a Blob from the model buffer and load it with TensorFlow.js
+        const modelBlob = new Blob([modelBuffer], { type: 'application/octet-stream' });
+        const modelUrl = URL.createObjectURL(modelBlob);
+        
+        console.log('Loading model with TensorFlow.js...');
+        let model;
+        try {
+            model = await tflite.loadTFLiteModel(modelUrl);
+        } catch (loadError) {
+            console.log('Failed to load model with TensorFlow.js:', loadError.message);
+            console.log('Falling back to flatbuffers approach...');
+            URL.revokeObjectURL(modelUrl);
+            await this.extractModelAttributesFlatbuffers(modelBuffer);
+            return;
+        }
+        
+        // Get model signature (metadata)
+        const signature = model.signature;
+        console.log('Model Signature:', signature);
+        
+        // Get input and output details
+        console.log('\n=== Model Inputs ===');
+        if (signature.inputs) {
+            Object.keys(signature.inputs).forEach(inputName => {
+                const input = signature.inputs[inputName];
+                console.log(`Input: ${inputName}`);
+                console.log(`  Shape: ${input.shape.join('x')}`);
+                console.log(`  Type: ${input.dtype}`);
+                if (input.quantization) {
+                    console.log(`  Quantization: scale=${input.quantization.scale}, zero_point=${input.quantization.zero_point}`);
+                }
+                console.log('');
+            });
+        }
+        
+        console.log('\n=== Model Outputs ===');
+        if (signature.outputs) {
+            Object.keys(signature.outputs).forEach(outputName => {
+                const output = signature.outputs[outputName];
+                console.log(`Output: ${outputName}`);
+                console.log(`  Shape: ${output.shape.join('x')}`);
+                console.log(`  Type: ${output.dtype}`);
+                if (output.quantization) {
+                    console.log(`  Quantization: scale=${output.quantization.scale}, zero_point=${output.quantization.zero_point}`);
+                }
+                console.log('');
+            });
+        }
+        
+        // Try to get model metadata
+        console.log('\n=== Model Metadata ===');
+        if (model.modelMetadata) {
+            console.log('Model Metadata:', model.modelMetadata);
+        }
+        
+        // Try to get model details from the internal representation
+        console.log('\n=== Model Details ===');
+        console.log('Full model object:', model);
+        
+        // Try different ways to access the model internals
+        if (model.model) {
+            const modelDetails = model.model;
+            console.log('Model Details:', modelDetails);
+            
+            // Try to access operator information
+            if (modelDetails.ops) {
+                console.log('\n=== Operator Details ===');
+                modelDetails.ops.forEach((op, index) => {
+                    console.log(`Operator ${index}:`);
+                    console.log(`  Type: ${op.op}`);
+                    console.log(`  Inputs: ${op.inputs ? op.inputs.join(', ') : 'N/A'}`);
+                    console.log(`  Outputs: ${op.outputs ? op.outputs.join(', ') : 'N/A'}`);
+                    
+                    // Try to get operator attributes
+                    if (op.attrs) {
+                        console.log('  Attributes:');
+                        Object.keys(op.attrs).forEach(attrName => {
+                            console.log(`    ${attrName}: ${JSON.stringify(op.attrs[attrName])}`);
+                        });
+                    }
+                    console.log('');
+                });
+            }
+        }
+        
+        // Try to access the model's internal graph
+        if (model.graph) {
+            console.log('\n=== Model Graph ===');
+            console.log('Graph:', model.graph);
+        }
+        
+        // Try to access the model's execution plan
+        if (model.executionPlan) {
+            console.log('\n=== Execution Plan ===');
+            console.log('Execution Plan:', model.executionPlan);
+        }
+        
+        // Try to get the model's metadata
+        if (model.metadata) {
+            console.log('\n=== Model Metadata ===');
+            console.log('Metadata:', model.metadata);
+        }
+        
+        // Try to access the model's internal representation
+        console.log('\n=== Model Internal Properties ===');
+        Object.keys(model).forEach(key => {
+            console.log(`${key}:`, model[key]);
+        });
+        
+        // Try alternative approach - convert to TensorFlow.js model
+        console.log('\n=== Trying TensorFlow.js Model Conversion ===');
+        try {
+            // Try to get the model as a TensorFlow.js model
+            const tfModel = await tf.loadGraphModel(modelUrl);
+            console.log('TensorFlow.js Model:', tfModel);
+            
+            // Get model inputs and outputs
+            const inputs = tfModel.inputs;
+            const outputs = tfModel.outputs;
+            
+            console.log('Model Inputs:', inputs);
+            console.log('Model Outputs:', outputs);
+            
+            // Try to get the model's graph
+            if (tfModel.graph) {
+                console.log('Model Graph:', tfModel.graph);
+                
+                // Try to access nodes in the graph
+                if (tfModel.graph.nodes) {
+                    console.log('\n=== Graph Nodes ===');
+                    Object.keys(tfModel.graph.nodes).forEach(nodeName => {
+                        const node = tfModel.graph.nodes[nodeName];
+                        console.log(`Node: ${nodeName}`);
+                        console.log('  Node details:', node);
+                        
+                        // Try to get node attributes
+                        if (node.attr) {
+                            console.log('  Attributes:');
+                            Object.keys(node.attr).forEach(attrName => {
+                                console.log(`    ${attrName}:`, node.attr[attrName]);
+                            });
+                        }
+                        console.log('');
+                    });
+                }
+            }
+        } catch (conversionError) {
+            console.log('TensorFlow.js conversion failed:', conversionError.message);
+        }
+        
+        // Clean up the blob URL
+        URL.revokeObjectURL(modelUrl);
+        
+        console.log('=== Model Attributes Extraction Complete ===');
+        
+    } catch (error) {
+        console.error('Error extracting model attributes with TensorFlow.js:', error);
+        
+        // Fallback to flatbuffers approach if TensorFlow.js fails
+        console.log('Falling back to flatbuffers approach...');
+        await this.extractModelAttributesFlatbuffers(modelBuffer);
+    }
+    
+    // Detailed operator attributes are now integrated into the main flatbuffers extraction above
+};
+
+// Function to extract detailed attributes for a single operator
+serial.Port.prototype.extractOperatorAttributes = async function(op, opName, tflite, operatorIndex) {
+    try {
+        // Helper function to convert op name to PascalCase
+        function toPascalCase(opName) {
+            return opName
+                .toLowerCase()
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join('');
+        }
+        
+        // Helper function to get options class name
+        function getOptionsClassName(opName) {
+            return `${toPascalCase(opName)}Options`;
+        }
+        
+        const optionsClassName = getOptionsClassName(opName);
+        
+        // Check if this operator has builtin options
+        const optionsType = tflite.BuiltinOptions[`${opName}Options`];
+        if (!optionsType || op.builtinOptionsType() !== optionsType) {
+            console.log(`  Attributes: No builtin options available`);
+            return;
+        }
+        
+        // Try to get the options class from the main tflite import
+        const OptionsClass = tflite[optionsClassName];
+        if (!OptionsClass) {
+            console.log(`  Attributes: Options class ${optionsClassName} not found`);
+            return;
+        }
+        
+        const options = op.builtinOptions(new OptionsClass());
+        if (!options) {
+            console.log(`  Attributes: Failed to create options object`);
+            return;
+        }
+        
+        // Extract all available attributes dynamically
+        const attributes = {};
+        const prototype = Object.getPrototypeOf(options);
+        const methodNames = Object.getOwnPropertyNames(prototype);
+        
+        for (const key of methodNames) {
+            if (typeof options[key] === 'function' && key !== '__init' && key !== 'constructor') {
+                try {
+                    const value = options[key]();
+                    attributes[key] = value;
+                } catch (err) {
+                    // Skip methods that throw errors (likely not getters)
+                }
+            }
+        }
+        
+        if (Object.keys(attributes).length > 0) {
+            console.log(`  Attributes:`);
+            
+            // Format specific attributes for better readability
+            if (attributes.strideH !== undefined || attributes.strideW !== undefined) {
+                const strideH = attributes.strideH || 1;
+                const strideW = attributes.strideW || 1;
+                console.log(`    Stride: (${strideH}, ${strideW})`);
+            }
+            
+            if (attributes.dilationHFactor !== undefined || attributes.dilationWFactor !== undefined) {
+                const dilationH = attributes.dilationHFactor || 1;
+                const dilationW = attributes.dilationWFactor || 1;
+                console.log(`    Dilation: (${dilationH}, ${dilationW})`);
+            }
+            
+            if (attributes.filterHeight !== undefined || attributes.filterWidth !== undefined) {
+                const filterH = attributes.filterHeight || 1;
+                const filterW = attributes.filterWidth || 1;
+                console.log(`    Filter: (${filterH}, ${filterW})`);
+            }
+            
+            if (attributes.padding !== undefined) {
+                const paddingName = tflite.Padding[attributes.padding] || `UNKNOWN(${attributes.padding})`;
+                console.log(`    Padding: ${paddingName}`);
+            }
+            
+            if (attributes.fusedActivationFunction !== undefined) {
+                const activationName = tflite.ActivationFunctionType[attributes.fusedActivationFunction] || `UNKNOWN(${attributes.fusedActivationFunction})`;
+                console.log(`    Activation: ${activationName}`);
+            }
+            
+            // Show all raw attributes for completeness
+            console.log(`    Raw attributes:`, attributes);
+        } else {
+            console.log(`  Attributes: No attributes extracted`);
+        }
+        
+    } catch (error) {
+        console.log(`  Attributes: Error extracting attributes - ${error.message}`);
+    }
+};
+
+// Fallback function using flatbuffers (original implementation)
+serial.Port.prototype.extractModelAttributesFlatbuffers = async function(modelBuffer) {
+    console.log('=== Extracting Model Attributes using Flatbuffers ===');
+    
+    try {
+        // Import the flatbuffers schema using the correct path
+        const { Model } = await import('./dist/tflite.js');
+        const tflite = await import('./dist/tflite.js');
+        const flatbuffers = await import('./node_modules/flatbuffers/mjs/flatbuffers.js');
+        
+        // Verify the model buffer
+        if (!modelBuffer || modelBuffer.length === 0) {
+            console.error('Error: Invalid model buffer');
+            return;
+        }
+        
+        // Create ByteBuffer from model data (following parse-and-launch.js pattern)
+        const bb = new flatbuffers.ByteBuffer(new Uint8Array(modelBuffer));
+        
+        // Get the model from flatbuffer
+        const model = Model.getRootAsModel(bb);
+        if (!model) {
+            console.error('Error: Failed to get model from flatbuffer');
+            return;
+        }
+        
+        // Get subgraphs
+        const subgraphsLength = model.subgraphsLength();
+        if (subgraphsLength === 0) {
+            console.error('Error: No subgraphs found in model');
+            return;
+        }
+        
+        // Process the main subgraph (usually index 0)
+        const subgraph = model.subgraphs(0);
+        if (!subgraph) {
+            console.error('Error: Failed to get main subgraph');
+            return;
+        }
+        
+        // Get operators and tensors
+        const operatorsLength = subgraph.operatorsLength();
+        const tensorsLength = subgraph.tensorsLength();
+        
+        console.log('Model Analysis:');
+        console.log(`- Number of operators: ${operatorsLength}`);
+        console.log(`- Number of tensors: ${tensorsLength}`);
+        
+        // Extract operator information with comprehensive analysis (matching ns_tflite_analyze.py)
+        console.log('\n=== Comprehensive Operator Analysis (ns_model.cc format) ===');
+        
+        // Arrays to store all the data (matching ns_model.cc format)
+        const macEstimates = [];
+        const macStrings = [];
+        const outputShapes = [];
+        const outputMagnitudes = [];
+        const strideH = [];
+        const strideW = [];
+        const dilationH = [];
+        const dilationW = [];
+        const macFilterShapes = [];
+        const readEstimates = [];
+        const writeEstimates = [];
+        const inputMagnitudes = [];
+        
+        // Helper function to get tensor shape as array
+        function getTensorShapeArray(tensor) {
+            if (!tensor || !tensor.shape) return [0, 0, 0, 0];
+            const shape = [];
+            for (let i = 0; i < tensor.shapeLength(); i++) {
+                shape.push(tensor.shape(i));
+            }
+            // Pad to 4 dimensions if needed
+            while (shape.length < 4) {
+                shape.push(0);
+            }
+            return shape.slice(0, 4);
+        }
+        
+        // Helper function to calculate tensor magnitude (product of all dimensions)
+        function calculateTensorMagnitude(shape) {
+            let magnitude = 1;
+            for (let dim of shape) {
+                magnitude *= dim;
+            }
+            return magnitude;
+        }
+        
+        // Function to extract operator attributes for analysis (simplified version)
+        async function extractOperatorAttributesForAnalysis(op, opName, tflite) {
+            try {
+                // Helper function to convert op name to PascalCase
+                function toPascalCase(opName) {
+                    return opName
+                        .toLowerCase()
+                        .split('_')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join('');
+                }
+                
+                // Helper function to get options class name
+                function getOptionsClassName(opName) {
+                    // Special mapping for operator names to their correct options class names
+                    const optionsClassMap = {
+                        'CONV_2D': 'Conv2DOptions',
+                        'DEPTHWISE_CONV_2D': 'DepthwiseConv2DOptions',
+                        'FULLY_CONNECTED': 'FullyConnectedOptions',
+                        'MAX_POOL_2D': 'Pool2DOptions',
+                        'AVERAGE_POOL_2D': 'Pool2DOptions',
+                        'ADD': 'AddOptions',
+                        'MUL': 'MulOptions',
+                        'PAD': 'PadOptions',
+                        'RESHAPE': 'ReshapeOptions',
+                        'TRANSPOSE': 'TransposeOptions',
+                        'GATHER': 'GatherOptions',
+                        'CONCATENATION': 'ConcatenationOptions',
+                        'SOFTMAX': 'SoftmaxOptions',
+                        'L2_NORMALIZATION': 'L2NormOptions',
+                        'LOCAL_RESPONSE_NORMALIZATION': 'LocalResponseNormalizationOptions',
+                        'RESIZE_BILINEAR': 'ResizeBilinearOptions',
+                        'LSTM': 'LSTMOptions',
+                        'RNN': 'RNNOptions',
+                        'SVDF': 'SVDFOptions',
+                        'CALL': 'CallOptions',
+                        'EMBEDDING_LOOKUP_SPARSE': 'EmbeddingLookupSparseOptions',
+                        'BATCH_TO_SPACE_ND': 'BatchToSpaceNDOptions',
+                        'SPACE_TO_BATCH_ND': 'SpaceToBatchNDOptions',
+                        'REDUCE_ANY': 'ReducerOptions',
+                        'REDUCE_MAX': 'ReducerOptions',
+                        'REDUCE_MIN': 'ReducerOptions',
+                        'REDUCE_PROD': 'ReducerOptions',
+                        'REDUCE_SUM': 'ReducerOptions',
+                        'SKIP_GRAM': 'SkipGramOptions',
+                        'SPACE_TO_DEPTH': 'SpaceToDepthOptions'
+                    };
+                    
+                    return optionsClassMap[opName] || `${toPascalCase(opName)}Options`;
+                }
+                
+                const optionsClassName = getOptionsClassName(opName);
+                
+                // Check if this operator has builtin options
+                // Map operator names to the correct BuiltinOptions enum values
+                const optionsTypeMap = {
+                    'CONV_2D': tflite.BuiltinOptions.Conv2DOptions,
+                    'DEPTHWISE_CONV_2D': tflite.BuiltinOptions.DepthwiseConv2DOptions,
+                    'FULLY_CONNECTED': tflite.BuiltinOptions.FullyConnectedOptions,
+                    'MAX_POOL_2D': tflite.BuiltinOptions.Pool2DOptions,
+                    'AVERAGE_POOL_2D': tflite.BuiltinOptions.Pool2DOptions,
+                    'ADD': tflite.BuiltinOptions.AddOptions,
+                    'MUL': tflite.BuiltinOptions.MulOptions,
+                    'PAD': tflite.BuiltinOptions.PadOptions,
+                    'RESHAPE': tflite.BuiltinOptions.ReshapeOptions,
+                    'TRANSPOSE': tflite.BuiltinOptions.TransposeOptions,
+                    'GATHER': tflite.BuiltinOptions.GatherOptions,
+                    'CONCATENATION': tflite.BuiltinOptions.ConcatenationOptions,
+                    'SOFTMAX': tflite.BuiltinOptions.SoftmaxOptions,
+                    'L2_NORMALIZATION': tflite.BuiltinOptions.L2NormOptions,
+                    'LOCAL_RESPONSE_NORMALIZATION': tflite.BuiltinOptions.LocalResponseNormalizationOptions,
+                    'RESIZE_BILINEAR': tflite.BuiltinOptions.ResizeBilinearOptions,
+                    'LSTM': tflite.BuiltinOptions.LSTMOptions,
+                    'RNN': tflite.BuiltinOptions.RNNOptions,
+                    'SVDF': tflite.BuiltinOptions.SVDFOptions,
+                    'CALL': tflite.BuiltinOptions.CallOptions,
+                    'EMBEDDING_LOOKUP_SPARSE': tflite.BuiltinOptions.EmbeddingLookupSparseOptions,
+                    'BATCH_TO_SPACE_ND': tflite.BuiltinOptions.BatchToSpaceNDOptions,
+                    'SPACE_TO_BATCH_ND': tflite.BuiltinOptions.SpaceToBatchNDOptions,
+                    'REDUCE_ANY': tflite.BuiltinOptions.ReducerOptions,
+                    'REDUCE_MAX': tflite.BuiltinOptions.ReducerOptions,
+                    'REDUCE_MIN': tflite.BuiltinOptions.ReducerOptions,
+                    'REDUCE_PROD': tflite.BuiltinOptions.ReducerOptions,
+                    'REDUCE_SUM': tflite.BuiltinOptions.ReducerOptions,
+                    'SKIP_GRAM': tflite.BuiltinOptions.SkipGramOptions,
+                    'SPACE_TO_DEPTH': tflite.BuiltinOptions.SpaceToDepthOptions
+                };
+                
+                const optionsType = optionsTypeMap[opName];
+                
+                if (!optionsType || op.builtinOptionsType() !== optionsType) {
+                    // No builtin options for this operator, return defaults
+                    return { strideH: 0, strideW: 0, dilationHFactor: 0, dilationWFactor: 0 };
+                }
+                
+                // Try to get the options class from the main tflite import
+                const OptionsClass = tflite[optionsClassName];
+                
+                if (!OptionsClass) {
+                    // Options class not found, return defaults
+                    return { strideH: 0, strideW: 0, dilationHFactor: 0, dilationWFactor: 0 };
+                }
+                
+                const options = op.builtinOptions(new OptionsClass());
+                
+                if (!options) {
+                    // Failed to create options object, return defaults
+                    return { strideH: 0, strideW: 0, dilationHFactor: 0, dilationWFactor: 0 };
+                }
+                
+                // Extract all available attributes and default to 0 for missing ones
+                const attributes = {
+                    strideH: 0,
+                    strideW: 0,
+                    dilationHFactor: 0,
+                    dilationWFactor: 0
+                };
+                
+                const prototype = Object.getPrototypeOf(options);
+                const methodNames = Object.getOwnPropertyNames(prototype);
+                
+                for (const key of methodNames) {
+                    if (typeof options[key] === 'function' && key !== '__init' && key !== 'constructor') {
+                        try {
+                            const value = options[key]();
+                            attributes[key] = value;
+                        } catch (err) {
+                            // Skip methods that throw errors
+                        }
+                    }
+                }
+                
+                return attributes;
+                
+            } catch (error) {
+                // Any error, return defaults
+                return { strideH: 0, strideW: 0, dilationHFactor: 0, dilationWFactor: 0 };
+            }
+        }
+        
+        for (let i = 0; i < operatorsLength; i++) {
+            const op = subgraph.operators(i);
+            if (!op) continue;
+            
+            // Get operator code
+            const opCodeIndex = op.opcodeIndex();
+            const opCode = model.operatorCodes(opCodeIndex);
+            
+            let opName = 'Unknown';
+            if (opCode) {
+                const builtinCode = opCode.builtinCode();
+                if (builtinCode !== tflite.BuiltinOperator.CUSTOM) {
+                    opName = tflite.BuiltinOperator[builtinCode];
+                } else if (opCode.customCode()) {
+                    opName = opCode.customCode();
+                }
+            }
+            
+            console.log(`\nOperator ${i}: ${opName}`);
+            
+            // Get input and output tensors
+            const inputIndices = op.inputsArray().filter(idx => idx !== -1);
+            const outputIndices = op.outputsArray().filter(idx => idx !== -1);
+            
+            // Get tensor shapes
+            let inputs = { shape: [0, 0, 0, 0] };
+            let outputs = { shape: [0, 0, 0, 0] };
+            let filter = { shape: [0, 0, 0, 0] };
+            
+            if (inputIndices.length > 0) {
+                const inputTensor = subgraph.tensors(inputIndices[0]);
+                if (inputTensor) {
+                    inputs.shape = getTensorShapeArray(inputTensor);
+                    console.log(`  Input shape: [${inputs.shape.join(', ')}]`);
+                }
+            }
+            
+            if (outputIndices.length > 0) {
+                const outputTensor = subgraph.tensors(outputIndices[0]);
+                if (outputTensor) {
+                    outputs.shape = getTensorShapeArray(outputTensor);
+                    console.log(`  Output shape: [${outputs.shape.join(', ')}]`);
+                }
+            }
+            
+            // Get filter tensor for convolution operations
+            if (inputIndices.length > 1) {
+                const filterTensor = subgraph.tensors(inputIndices[1]);
+                if (filterTensor) {
+                    filter.shape = getTensorShapeArray(filterTensor);
+                    console.log(`  Filter shape: [${filter.shape.join(', ')}]`);
+                }
+            }
+            
+            // Extract operator attributes
+            const attributes = await extractOperatorAttributesForAnalysis(op, opName, tflite);
+            console.log(`  Attributes: strideH=${attributes.strideH || 0}, strideW=${attributes.strideW || 0}, dilationH=${attributes.dilationHFactor || 0}, dilationW=${attributes.dilationWFactor || 0}`);
+            if (opName === 'MAX_POOL_2D' || opName === 'AVERAGE_POOL_2D') {
+                console.log(`  Pooling specific: filterWidth=${attributes.filterWidth || 0}, filterHeight=${attributes.filterHeight || 0}, padding=${attributes.padding || 0}`);
+            }
+            
+            // Calculate MACs and other metrics based on operator type
+            let macs = 0;
+            let macString = "0";
+            let memoryReads = 0;
+            let memoryWrites = 0;
+            
+            if (opName === "CONV_2D") {
+                // CONV_2D: filter_width * filter_height * output_width * output_height * input_channels * output_channels
+                macs = filter.shape[1] * filter.shape[2] * outputs.shape[1] * outputs.shape[2] * filter.shape[0] * inputs.shape[3];
+                macString = `${filter.shape[1]}*${filter.shape[2]}*${outputs.shape[1]}*${outputs.shape[2]}*${filter.shape[0]}*${inputs.shape[3]}`;
+                
+                // Memory reads: filter_width * filter_height * input_channels * output_width * output_height
+                memoryReads = filter.shape[1] * filter.shape[2] * inputs.shape[3] * outputs.shape[1] * outputs.shape[2];
+                
+                // Memory writes: output_width * output_height * output_channels
+                memoryWrites = outputs.shape[1] * outputs.shape[2] * outputs.shape[3];
+                
+            } else if (opName === "DEPTHWISE_CONV_2D") {
+                // DEPTHWISE_CONV_2D: filter_width * filter_height * output_width * output_height * channels
+                macs = filter.shape[1] * filter.shape[2] * outputs.shape[1] * outputs.shape[2] * filter.shape[3];
+                macString = `${filter.shape[1]}*${filter.shape[2]}*${outputs.shape[1]}*${outputs.shape[2]}*${filter.shape[3]}`;
+                
+                // Memory reads: filter_width * filter_height * input_channels * output_width * output_height
+                memoryReads = filter.shape[1] * filter.shape[2] * inputs.shape[3] * outputs.shape[1] * outputs.shape[2];
+                
+                // Memory writes: output_width * output_height * output_channels
+                memoryWrites = outputs.shape[1] * outputs.shape[2] * outputs.shape[3];
+                
+            } else if (opName === "FULLY_CONNECTED") {
+                // FULLY_CONNECTED: accum_depth * output_depth * batch_size
+                macs = filter.shape[filter.shape.length - 1] * outputs.shape[0] * outputs.shape[1];
+                macString = `${filter.shape[filter.shape.length - 1]}*${outputs.shape[0]}*${outputs.shape[1]}`;
+                
+                // Memory reads: accum_depth * output_depth * batch_size
+                memoryReads = filter.shape[filter.shape.length - 1] * outputs.shape[0] * outputs.shape[1];
+                
+                // Memory writes: batch_size * output_depth
+                memoryWrites = outputs.shape[0] * outputs.shape[1];
+                
+            } else {
+                // Other operations: no MACs
+                macs = 0;
+                macString = "0";
+                
+                // Memory reads/writes based on tensor magnitudes
+                memoryReads = calculateTensorMagnitude(inputs.shape);
+                memoryWrites = calculateTensorMagnitude(outputs.shape);
+            }
+            
+            // Calculate tensor magnitudes
+            const inputMagnitude = calculateTensorMagnitude(inputs.shape);
+            const outputMagnitude = calculateTensorMagnitude(outputs.shape);
+            
+            // Store all the data
+            macEstimates.push(macs);
+            macStrings.push(macString);
+            outputShapes.push(outputs.shape.join('*'));
+            outputMagnitudes.push(outputMagnitude);
+            strideH.push(attributes.strideH || 0);
+            strideW.push(attributes.strideW || 0);
+            dilationH.push(attributes.dilationHFactor || 0);
+            dilationW.push(attributes.dilationWFactor || 0);
+            macFilterShapes.push(filter.shape.join('*'));
+            readEstimates.push(memoryReads);
+            writeEstimates.push(memoryWrites);
+            inputMagnitudes.push(inputMagnitude);
+            
+            // Log the analysis for this operator
+            console.log(`  MACs: ${macs} (${macString})`);
+            console.log(`  Output Shape: ${outputs.shape.join('*')}`);
+            console.log(`  Filter Shape: ${filter.shape.join('*')}`);
+            console.log(`  Stride: (${attributes.strideH || 0}, ${attributes.strideW || 0})`);
+            console.log(`  Dilation: (${attributes.dilationHFactor || 0}, ${attributes.dilationWFactor || 0})`);
+            console.log(`  Memory Reads: ${memoryReads}, Writes: ${memoryWrites}`);
+        }
+        
+        // Generate the ns_model.cc format output
+        console.log('\n=== ns_model.cc Format Output ===');
+        console.log(`uint32_t model_mac_estimates[${macEstimates.length}] = {${macEstimates.join(', ')}};`);
+        console.log(`const char* model_mac_strings[] = {"${macStrings.join('", "')}";`);
+        console.log(`const char* model_output_shapes[] = {"${outputShapes.join('", "')}";`);
+        console.log(`const uint32_t model_output_magnitudes[] = {${outputMagnitudes.join(', ')};`);
+        console.log(`const uint32_t model_stride_h[] = {${strideH.join(', ')};`);
+        console.log(`const uint32_t model_stride_w[] = {${strideW.join(', ')};`);
+        console.log(`const uint32_t model_dilation_h[] = {${dilationH.join(', ')};`);
+        console.log(`const uint32_t model_dilation_w[] = {${dilationW.join(', ')};`);
+        console.log(`const char* model_mac_filter_shapes[] = {"${macFilterShapes.join('", "')}";`);
+        console.log(`const uint32_t model_read_estimate[] = {${readEstimates.join(', ')};`);
+        console.log(`const uint32_t model_write_estimate[] = {${writeEstimates.join(', ')};`);
+        console.log(`const uint32_t model_input_magnitudes[] = {${inputMagnitudes.join(', ')};`);
+             
+        console.log('');
+        
+        // // Extract tensor information
+        // console.log('\n=== Tensor Details ===');
+        // for (let i = 0; i < tensorsLength; i++) {
+        //     const tensor = subgraph.tensors(i);
+        //     if (!tensor) continue;
+            
+        //     console.log(`Tensor ${i}:`);
+            
+        //     // Name
+        //     if (tensor.name()) {
+        //         console.log(`  Name: ${tensor.name()}`);
+        //     }
+            
+        //     // Type
+        //     console.log(`  Type: ${getTensorTypeName(tensor)}`);
+            
+        //     // Shape
+        //     console.log(`  Shape: ${getTensorShape(tensor)}`);
+            
+        //     // Quantization
+        //     const quantization = tensor.quantization();
+        //     if (quantization) {
+        //         const scaleLength = quantization.scaleLength();
+        //         const zeroPointLength = quantization.zeroPointLength();
+                
+        //         if (scaleLength > 0) {
+        //             console.log(`  Scale: ${quantization.scale(0)}`);
+        //         }
+        //         if (zeroPointLength > 0) {
+        //             console.log(`  Zero Point: ${quantization.zeroPoint(0)}`);
+        //         }
+        //     }
+            
+        //     console.log('');
+        // }
+        
+        console.log('=== Model Attributes Extraction Complete ===');
+        
+    } catch (error) {
+        console.error('Error extracting model attributes with flatbuffers:', error);
+    }
+};
+
+// Enhanced function to extract detailed operator attributes using dynamic Flatbuffers access
+serial.Port.prototype.extractDetailedOperatorAttributes = async function(modelBuffer) {
+    console.log('=== Extracting Detailed Operator Attributes ===');
+    console.log('Function called with modelBuffer length:', modelBuffer ? modelBuffer.length : 'null');
+    
+    try {
+        // Import the flatbuffers schema
+        const { Model } = await import('./dist/tflite.js');
+        const tflite = await import('./dist/tflite.js');
+        const flatbuffers = await import('./node_modules/flatbuffers/mjs/flatbuffers.js');
+        
+        // Helper function to convert op name to PascalCase
+        function toPascalCase(opName) {
+            return opName
+                .toLowerCase()
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join('');
+        }
+        
+        // Helper function to get options class name
+        function getOptionsClassName(opName) {
+            return `${toPascalCase(opName)}Options`;
+        }
+        
+        // Dynamic function to extract operator attributes
+        async function extractOpAttributes(op, opName, tflite) {
+            const optionsClassName = getOptionsClassName(opName); // e.g., Conv2DOptions
+            
+            console.log(`  Debug: optionsClassName = ${optionsClassName}`);
+            
+            // Check if this operator has builtin options
+            const optionsType = tflite.BuiltinOptions[`${opName}Options`];
+            console.log(`  Debug: optionsType = ${optionsType}, op.builtinOptionsType() = ${op.builtinOptionsType()}`);
+            
+            if (!optionsType || op.builtinOptionsType() !== optionsType) {
+                console.log(`  Debug: No matching options type for ${opName}`);
+                return null;
+            }
+            
+            try {
+                // Try to get the options class from the main tflite import
+                const OptionsClass = tflite[optionsClassName];
+                console.log(`  Debug: OptionsClass found = ${OptionsClass ? 'Yes' : 'No'}`);
+                
+                if (!OptionsClass) {
+                    console.warn(`Options class ${optionsClassName} not found in tflite import`);
+                    console.log(`  Debug: Available tflite keys:`, Object.keys(tflite).filter(k => k.includes('Options')));
+                    return null;
+                }
+                
+                const options = op.builtinOptions(new OptionsClass());
+                console.log(`  Debug: options object created = ${options ? 'Yes' : 'No'}`);
+                
+                if (!options) {
+                    return null;
+                }
+                
+                // Extract all available attributes dynamically
+                const out = {};
+                const prototype = Object.getPrototypeOf(options);
+                const methodNames = Object.getOwnPropertyNames(prototype);
+                console.log(`  Debug: Available methods:`, methodNames);
+                
+                for (const key of methodNames) {
+                    if (typeof options[key] === 'function' && key !== '__init' && key !== 'constructor') {
+                        try {
+                            const value = options[key]();
+                            out[key] = value;
+                            console.log(`  Debug: Extracted ${key} = ${value}`);
+                        } catch (err) {
+                            console.log(`  Debug: Failed to extract ${key}: ${err.message}`);
+                        }
+                    }
+                }
+                
+                console.log(`  Debug: Final extracted attributes:`, out);
+                return out;
+            } catch (err) {
+                console.warn(`Could not load or parse options for ${opName}:`, err);
+                return null;
+            }
+        }
+        
+        // Create ByteBuffer from model data
+        const bb = new flatbuffers.ByteBuffer(new Uint8Array(modelBuffer));
+        const model = Model.getRootAsModel(bb);
+        
+        if (!model || !model.subgraphsLength()) {
+            console.error('No subgraphs found in model');
+            return;
+        }
+        
+        const subgraph = model.subgraphs(0);
+        const operatorsLength = subgraph.operatorsLength();
+        
+        console.log(`\nAnalyzing ${operatorsLength} operators for detailed attributes...`);
+        console.log('Debug: Available tflite exports:', Object.keys(tflite).filter(k => k.includes('Options')));
+        console.log('Debug: BuiltinOptions enum:', tflite.BuiltinOptions);
+        
+        for (let i = 0; i < operatorsLength; i++) {
+            const op = subgraph.operators(i);
+            if (!op) continue;
+            
+            const opCodeIndex = op.opcodeIndex();
+            const opCode = model.operatorCodes(opCodeIndex);
+            const builtinCode = opCode.builtinCode();
+            const opName = tflite.BuiltinOperator[builtinCode] || 'UNKNOWN';
+            
+            console.log(`\nOperator ${i}: ${opName}`);
+            
+            // Extract attributes dynamically
+            const options = await extractOpAttributes(op, opName, tflite);
+            
+            if (options) {
+                console.log(`  ${opName} #${i} options:`, options);
+                
+                // Format specific attributes for better readability
+                if (options.strideH !== undefined || options.strideW !== undefined) {
+                    const strideH = options.strideH || 1;
+                    const strideW = options.strideW || 1;
+                    console.log(`    Stride: (${strideH}, ${strideW})`);
+                }
+                
+                if (options.dilationHFactor !== undefined || options.dilationWFactor !== undefined) {
+                    const dilationH = options.dilationHFactor || 1;
+                    const dilationW = options.dilationWFactor || 1;
+                    console.log(`    Dilation: (${dilationH}, ${dilationW})`);
+                }
+                
+                if (options.filterHeight !== undefined || options.filterWidth !== undefined) {
+                    const filterH = options.filterHeight || 1;
+                    const filterW = options.filterWidth || 1;
+                    console.log(`    Filter: (${filterH}, ${filterW})`);
+                }
+                
+                if (options.padding !== undefined) {
+                    const paddingName = tflite.Padding[options.padding] || `UNKNOWN(${options.padding})`;
+                    console.log(`    Padding: ${paddingName}`);
+                }
+                
+                if (options.fusedActivationFunction !== undefined) {
+                    const activationName = tflite.ActivationFunctionType[options.fusedActivationFunction] || `UNKNOWN(${options.fusedActivationFunction})`;
+                    console.log(`    Activation: ${activationName}`);
+                }
+            } else {
+                console.log(`  ${opName} #${i}: No options available`);
+            }
+        }
+        
+        console.log('\n=== Detailed Operator Attributes Extraction Complete ===');
+        
+    } catch (error) {
+        console.error('Error extracting detailed operator attributes:', error);
+    }
+};
+
 // Main upload function
 serial.Port.prototype.uploadModel = async function(file, modelLocation, arenaLocation, onProgress, onError, onComplete) {
     // First, send the model configuration
@@ -487,6 +1374,601 @@ serial.Port.prototype.uploadModel = async function(file, modelLocation, arenaLoc
         if (onProgress) onProgress(((chunkNum + 1) / totalChunks) * 100);
     }
     console.log('Upload completed successfully');
+    
+    // Extract and log model attributes, then send derived arrays to EVB
+    try {
+        const fileBuf = new Uint8Array(await file.arrayBuffer());
+        await this.extractModelAttributes(fileBuf);
+        
+        // Extract derived values and send to EVB
+        console.log('Extracting derived values to send to EVB...');
+        const derivedValues = await this.extractDerivedValuesForEVB(fileBuf);
+        if (derivedValues) {
+            console.log('Sending derived arrays to EVB...');
+            await this.sendDerivedArrays(derivedValues);
+            console.log('Derived arrays sent successfully');
+        }
+    } catch (error) {
+        console.error('Failed to extract model attributes or send derived arrays:', error);
+    }
+    
     if (onComplete) onComplete();
+};
+
+// Extract derived values from TFLite model for sending to EVB
+serial.Port.prototype.extractDerivedValuesForEVB = async function(modelBuffer) {
+    try {
+        console.log('Extracting derived values by reusing existing analysis function...');
+        
+        // Import the flatbuffers schema using the same approach as extractModelAttributesFlatbuffers
+        const { Model } = await import('./dist/tflite.js');
+        const tflite = await import('./dist/tflite.js');
+        const flatbuffers = await import('./node_modules/flatbuffers/mjs/flatbuffers.js');
+        
+        // Create ByteBuffer from model data
+        const bb = new flatbuffers.ByteBuffer(new Uint8Array(modelBuffer));
+        
+        // Get the model from flatbuffer
+        const model = Model.getRootAsModel(bb);
+        if (!model) {
+            console.error('Error: Failed to get model from flatbuffer');
+            return null;
+        }
+        
+        // Get subgraphs
+        const subgraphsLength = model.subgraphsLength();
+        if (subgraphsLength === 0) {
+            console.error('Error: No subgraphs found in model');
+            return null;
+        }
+        
+        // Process the main subgraph (usually index 0)
+        const subgraph = model.subgraphs(0);
+        if (!subgraph) {
+            console.error('Error: Failed to get main subgraph');
+            return null;
+        }
+        
+        const operatorsLength = subgraph.operatorsLength();
+        console.log(`Model has ${operatorsLength} operators`);
+        
+        // Arrays to store derived values (reusing the same structure as extractModelAttributesFlatbuffers)
+        const macEstimates = [];
+        const strideH = [];
+        const strideW = [];
+        const dilationH = [];
+        const dilationW = [];
+        const outputMagnitudes = [];
+        const readEstimates = [];
+        const writeEstimates = [];
+        const inputMagnitudes = [];
+        
+        // Arrays to store string representations for TFLM profiling
+        const macStrings = [];
+        const outputShapes = [];
+        const filterShapes = [];
+        
+        // Helper function to get tensor shape as array (reused from extractModelAttributesFlatbuffers)
+        function getTensorShapeArray(tensor) {
+            if (!tensor || !tensor.shape) return [0, 0, 0, 0];
+            const shape = [];
+            for (let i = 0; i < tensor.shapeLength(); i++) {
+                shape.push(tensor.shape(i));
+            }
+            // Pad to 4 dimensions if needed
+            while (shape.length < 4) {
+                shape.push(0);
+            }
+            return shape.slice(0, 4);
+        }
+        
+        // Helper function to calculate tensor magnitude (reused from extractModelAttributesFlatbuffers)
+        function calculateTensorMagnitude(shape) {
+            let magnitude = 1;
+            for (let dim of shape) {
+                magnitude *= dim;
+            }
+            return magnitude;
+        }
+        
+        // Reuse the existing extractOperatorAttributesForAnalysis function
+        async function extractOperatorAttributesForAnalysis(op, opName, tflite) {
+            try {
+                // Helper function to convert op name to PascalCase
+                function toPascalCase(opName) {
+                    return opName
+                        .toLowerCase()
+                        .split('_')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join('');
+                }
+                
+                // Helper function to get options class name
+                function getOptionsClassName(opName) {
+                    const optionsClassMap = {
+                        'CONV_2D': 'Conv2DOptions',
+                        'DEPTHWISE_CONV_2D': 'DepthwiseConv2DOptions',
+                        'FULLY_CONNECTED': 'FullyConnectedOptions',
+                        'MAX_POOL_2D': 'Pool2DOptions',
+                        'AVERAGE_POOL_2D': 'Pool2DOptions',
+                        'ADD': 'AddOptions',
+                        'MUL': 'MulOptions',
+                        'PAD': 'PadOptions',
+                        'RESHAPE': 'ReshapeOptions',
+                        'TRANSPOSE': 'TransposeOptions',
+                        'GATHER': 'GatherOptions',
+                        'CONCATENATION': 'ConcatenationOptions',
+                        'SOFTMAX': 'SoftmaxOptions',
+                        'L2_NORMALIZATION': 'L2NormOptions',
+                        'LOCAL_RESPONSE_NORMALIZATION': 'LocalResponseNormalizationOptions',
+                        'RESIZE_BILINEAR': 'ResizeBilinearOptions',
+                        'LSTM': 'LSTMOptions',
+                        'RNN': 'RNNOptions',
+                        'SVDF': 'SVDFOptions',
+                        'CALL': 'CallOptions',
+                        'EMBEDDING_LOOKUP_SPARSE': 'EmbeddingLookupSparseOptions',
+                        'BATCH_TO_SPACE_ND': 'BatchToSpaceNDOptions',
+                        'SPACE_TO_BATCH_ND': 'SpaceToBatchNDOptions',
+                        'REDUCE_ANY': 'ReducerOptions',
+                        'REDUCE_MAX': 'ReducerOptions',
+                        'REDUCE_MIN': 'ReducerOptions',
+                        'REDUCE_PROD': 'ReducerOptions',
+                        'REDUCE_SUM': 'ReducerOptions',
+                        'SKIP_GRAM': 'SkipGramOptions',
+                        'SPACE_TO_DEPTH': 'SpaceToDepthOptions'
+                    };
+                    
+                    return optionsClassMap[opName] || `${toPascalCase(opName)}Options`;
+                }
+                
+                const optionsClassName = getOptionsClassName(opName);
+                
+                // Map operator names to the correct BuiltinOptions enum values
+                const optionsTypeMap = {
+                    'CONV_2D': tflite.BuiltinOptions.Conv2DOptions,
+                    'DEPTHWISE_CONV_2D': tflite.BuiltinOptions.DepthwiseConv2DOptions,
+                    'FULLY_CONNECTED': tflite.BuiltinOptions.FullyConnectedOptions,
+                    'MAX_POOL_2D': tflite.BuiltinOptions.Pool2DOptions,
+                    'AVERAGE_POOL_2D': tflite.BuiltinOptions.Pool2DOptions,
+                    'ADD': tflite.BuiltinOptions.AddOptions,
+                    'MUL': tflite.BuiltinOptions.MulOptions,
+                    'PAD': tflite.BuiltinOptions.PadOptions,
+                    'RESHAPE': tflite.BuiltinOptions.ReshapeOptions,
+                    'TRANSPOSE': tflite.BuiltinOptions.TransposeOptions,
+                    'GATHER': tflite.BuiltinOptions.GatherOptions,
+                    'CONCATENATION': tflite.BuiltinOptions.ConcatenationOptions,
+                    'SOFTMAX': tflite.BuiltinOptions.SoftmaxOptions,
+                    'L2_NORMALIZATION': tflite.BuiltinOptions.L2NormOptions,
+                    'LOCAL_RESPONSE_NORMALIZATION': tflite.BuiltinOptions.LocalResponseNormalizationOptions,
+                    'RESIZE_BILINEAR': tflite.BuiltinOptions.ResizeBilinearOptions,
+                    'LSTM': tflite.BuiltinOptions.LSTMOptions,
+                    'RNN': tflite.BuiltinOptions.RNNOptions,
+                    'SVDF': tflite.BuiltinOptions.SVDFOptions,
+                    'CALL': tflite.BuiltinOptions.CallOptions,
+                    'EMBEDDING_LOOKUP_SPARSE': tflite.BuiltinOptions.EmbeddingLookupSparseOptions,
+                    'BATCH_TO_SPACE_ND': tflite.BuiltinOptions.BatchToSpaceNDOptions,
+                    'SPACE_TO_BATCH_ND': tflite.BuiltinOptions.SpaceToBatchNDOptions,
+                    'REDUCE_ANY': tflite.BuiltinOptions.ReducerOptions,
+                    'REDUCE_MAX': tflite.BuiltinOptions.ReducerOptions,
+                    'REDUCE_MIN': tflite.BuiltinOptions.ReducerOptions,
+                    'REDUCE_PROD': tflite.BuiltinOptions.ReducerOptions,
+                    'REDUCE_SUM': tflite.BuiltinOptions.ReducerOptions,
+                    'SKIP_GRAM': tflite.BuiltinOptions.SkipGramOptions,
+                    'SPACE_TO_DEPTH': tflite.BuiltinOptions.SpaceToDepthOptions
+                };
+                
+                const optionsType = optionsTypeMap[opName];
+                
+                if (!optionsType || op.builtinOptionsType() !== optionsType) {
+                    return { strideH: 0, strideW: 0, dilationHFactor: 0, dilationWFactor: 0 };
+                }
+                
+                const OptionsClass = tflite[optionsClassName];
+                
+                if (!OptionsClass) {
+                    return { strideH: 0, strideW: 0, dilationHFactor: 0, dilationWFactor: 0 };
+                }
+                
+                const options = op.builtinOptions(new OptionsClass());
+                
+                if (!options) {
+                    return { strideH: 0, strideW: 0, dilationHFactor: 0, dilationWFactor: 0 };
+                }
+                
+                const attributes = {
+                    strideH: 0,
+                    strideW: 0,
+                    dilationHFactor: 0,
+                    dilationWFactor: 0
+                };
+                
+                const prototype = Object.getPrototypeOf(options);
+                const methodNames = Object.getOwnPropertyNames(prototype);
+                
+                for (const key of methodNames) {
+                    if (typeof options[key] === 'function' && key !== '__init' && key !== 'constructor') {
+                        try {
+                            const value = options[key]();
+                            attributes[key] = value;
+                        } catch (err) {
+                            // Skip methods that throw errors
+                        }
+                    }
+                }
+                
+                return attributes;
+                
+            } catch (error) {
+                return { strideH: 0, strideW: 0, dilationHFactor: 0, dilationWFactor: 0 };
+            }
+        }
+        
+        // Process each operator using the same logic as extractModelAttributesFlatbuffers
+        for (let i = 0; i < operatorsLength; i++) {
+            const op = subgraph.operators(i);
+            if (!op) continue;
+            
+            // Get operator code
+            const opCodeIndex = op.opcodeIndex();
+            const opCode = model.operatorCodes(opCodeIndex);
+            
+            let opName = 'Unknown';
+            if (opCode) {
+                const builtinCode = opCode.builtinCode();
+                if (builtinCode !== tflite.BuiltinOperator.CUSTOM) {
+                    opName = tflite.BuiltinOperator[builtinCode];
+                } else if (opCode.customCode()) {
+                    opName = opCode.customCode();
+                }
+            }
+            
+            // Get input and output tensors
+            const inputIndices = op.inputsArray().filter(idx => idx !== -1);
+            const outputIndices = op.outputsArray().filter(idx => idx !== -1);
+            
+            // Get tensor shapes
+            let inputs = { shape: [0, 0, 0, 0] };
+            let outputs = { shape: [0, 0, 0, 0] };
+            let filter = { shape: [0, 0, 0, 0] };
+            
+            if (inputIndices.length > 0) {
+                const inputTensor = subgraph.tensors(inputIndices[0]);
+                if (inputTensor) {
+                    inputs.shape = getTensorShapeArray(inputTensor);
+                }
+            }
+            
+            if (outputIndices.length > 0) {
+                const outputTensor = subgraph.tensors(outputIndices[0]);
+                if (outputTensor) {
+                    outputs.shape = getTensorShapeArray(outputTensor);
+                }
+            }
+            
+            // Get filter tensor for convolution operations
+            if (inputIndices.length > 1) {
+                const filterTensor = subgraph.tensors(inputIndices[1]);
+                if (filterTensor) {
+                    filter.shape = getTensorShapeArray(filterTensor);
+                }
+            }
+            
+            // Extract operator attributes
+            const attributes = await extractOperatorAttributesForAnalysis(op, opName, tflite);
+            
+            // Calculate MACs and other metrics based on operator type (same logic as extractModelAttributesFlatbuffers)
+            let macs = 0;
+            let memoryReads = 0;
+            let memoryWrites = 0;
+            
+            if (opName === "CONV_2D") {
+                macs = filter.shape[1] * filter.shape[2] * outputs.shape[1] * outputs.shape[2] * filter.shape[0] * inputs.shape[3];
+                memoryReads = filter.shape[1] * filter.shape[2] * inputs.shape[3] * outputs.shape[1] * outputs.shape[2];
+                memoryWrites = outputs.shape[1] * outputs.shape[2] * outputs.shape[3];
+                
+            } else if (opName === "DEPTHWISE_CONV_2D") {
+                macs = filter.shape[1] * filter.shape[2] * outputs.shape[1] * outputs.shape[2] * filter.shape[3];
+                memoryReads = filter.shape[1] * filter.shape[2] * inputs.shape[3] * outputs.shape[1] * outputs.shape[2];
+                memoryWrites = outputs.shape[1] * outputs.shape[2] * outputs.shape[3];
+                
+            } else if (opName === "FULLY_CONNECTED") {
+                macs = filter.shape[filter.shape.length - 1] * outputs.shape[0] * outputs.shape[1];
+                memoryReads = filter.shape[filter.shape.length - 1] * outputs.shape[0] * outputs.shape[1];
+                memoryWrites = outputs.shape[0] * outputs.shape[1];
+                
+            } else {
+                macs = 0;
+                memoryReads = calculateTensorMagnitude(inputs.shape);
+                memoryWrites = calculateTensorMagnitude(outputs.shape);
+            }
+            
+            // Calculate tensor magnitudes
+            const inputMagnitude = calculateTensorMagnitude(inputs.shape);
+            const outputMagnitude = calculateTensorMagnitude(outputs.shape);
+            
+                    // Store all the data
+        macEstimates.push(macs);
+        strideH.push(attributes.strideH || 0);
+        strideW.push(attributes.strideW || 0);
+        dilationH.push(attributes.dilationHFactor || 0);
+        dilationW.push(attributes.dilationWFactor || 0);
+        outputMagnitudes.push(outputMagnitude);
+        readEstimates.push(memoryReads);
+        writeEstimates.push(memoryWrites);
+        inputMagnitudes.push(inputMagnitude);
+        
+        // Generate string representations for TFLM profiling
+        let macString = "0";
+        let outputShapeString = "0*0*0*0";
+        let filterShapeString = "0*0*0*0";
+        
+        if (opName === "CONV_2D") {
+            macString = `${filter.shape[1]}*${filter.shape[2]}*${outputs.shape[1]}*${outputs.shape[2]}*${filter.shape[0]}*${inputs.shape[3]}`;
+            outputShapeString = `${outputs.shape[0]}*${outputs.shape[1]}*${outputs.shape[2]}*${outputs.shape[3]}`;
+            filterShapeString = `${filter.shape[0]}*${filter.shape[1]}*${filter.shape[2]}*${filter.shape[3]}`;
+        } else if (opName === "DEPTHWISE_CONV_2D") {
+            macString = `${filter.shape[1]}*${filter.shape[2]}*${outputs.shape[1]}*${outputs.shape[2]}*${filter.shape[3]}`;
+            outputShapeString = `${outputs.shape[0]}*${outputs.shape[1]}*${outputs.shape[2]}*${outputs.shape[3]}`;
+            filterShapeString = `${filter.shape[0]}*${filter.shape[1]}*${filter.shape[2]}*${filter.shape[3]}`;
+        } else if (opName === "FULLY_CONNECTED") {
+            macString = `${filter.shape[filter.shape.length - 1]}*${outputs.shape[0]}*${outputs.shape[1]}`;
+            outputShapeString = `${outputs.shape[0]}*${outputs.shape[1]}`;
+            filterShapeString = `${filter.shape[0]}*${filter.shape[1]}`;
+        } else {
+            outputShapeString = `${outputs.shape[0]}*${outputs.shape[1]}*${outputs.shape[2]}*${outputs.shape[3]}`;
+        }
+        
+        macStrings.push(macString);
+        outputShapes.push(outputShapeString);
+        filterShapes.push(filterShapeString);
+        }
+        
+        console.log(`Extracted derived values for ${macEstimates.length} operators`);
+        console.log('MAC estimates:', macEstimates);
+        console.log('Stride H:', strideH);
+        
+        return {
+            macEstimates,
+            strideH,
+            strideW,
+            dilationH,
+            dilationW,
+            outputMagnitudes,
+            readEstimates,
+            writeEstimates,
+            inputMagnitudes,
+            macStrings,
+            outputShapes,
+            filterShapes
+        };
+        
+    } catch (error) {
+        console.error('Error extracting derived values for EVB:', error);
+        return null;
+    }
+};
+
+// Send derived arrays to EVB in chunks (similar to model upload)
+serial.Port.prototype.sendDerivedArrays = async function(derivedValues) {
+    console.log('Sending derived arrays to EVB...');
+    const DERIVED_ARRAYS_CMD = 0x06; // New command type
+    const { 
+        macEstimates, 
+        strideH, 
+        strideW, 
+        dilationH, 
+        dilationW, 
+        outputMagnitudes, 
+        readEstimates, 
+        writeEstimates, 
+        inputMagnitudes,
+        macStrings,
+        outputShapes,
+        filterShapes
+    } = derivedValues;
+    const numOperators = macEstimates.length;
+    
+    // Use the same chunking approach as model upload
+    const CHUNK_SIZE = 480; // Same as model upload chunk size
+    const METADATA_SIZE = 8; // total_ops (4) + chunk_ops (4)
+    const OPERATOR_DATA_SIZE = 36; // 9 values * 4 bytes each: mac, strideH, strideW, dilationH, dilationW, outputMag, readEst, writeEst, inputMag
+    const MAX_OPERATORS_PER_CHUNK = Math.floor((CHUNK_SIZE - METADATA_SIZE) / OPERATOR_DATA_SIZE);
+    
+    console.log(`Chunking: CHUNK_SIZE=${CHUNK_SIZE}, METADATA_SIZE=${METADATA_SIZE}, OPERATOR_DATA_SIZE=${OPERATOR_DATA_SIZE}, MAX_OPERATORS_PER_CHUNK=${MAX_OPERATORS_PER_CHUNK}`);
+    
+    const totalChunks = Math.ceil(numOperators / MAX_OPERATORS_PER_CHUNK);
+    
+    console.log(`Sending derived arrays: ${numOperators} operators in ${totalChunks} chunks (max ${MAX_OPERATORS_PER_CHUNK} operators per chunk)`);
+    
+    for (let chunkId = 0; chunkId < totalChunks; chunkId++) {
+        const startIdx = chunkId * MAX_OPERATORS_PER_CHUNK;
+        const endIdx = Math.min(startIdx + MAX_OPERATORS_PER_CHUNK, numOperators);
+        const operatorsInChunk = endIdx - startIdx;
+        
+        // Create payload for this chunk: chunk metadata + operator data
+        const payloadSize = METADATA_SIZE + operatorsInChunk * OPERATOR_DATA_SIZE;
+        const payload = new ArrayBuffer(payloadSize);
+        const view = new DataView(payload);
+        view.setUint32(0, numOperators, true); // Total operators (little-endian)
+        view.setUint32(4, operatorsInChunk, true); // Operators in this chunk
+        let offset = METADATA_SIZE;
+        
+        for (let i = 0; i < operatorsInChunk; i++) {
+            const opIdx = startIdx + i;
+            view.setUint32(offset, macEstimates[opIdx] || 0, true);
+            view.setUint32(offset + 4, strideH[opIdx] || 0, true);
+            view.setUint32(offset + 8, strideW[opIdx] || 0, true);
+            view.setUint32(offset + 12, dilationH[opIdx] || 0, true);
+            view.setUint32(offset + 16, dilationW[opIdx] || 0, true);
+            view.setUint32(offset + 20, outputMagnitudes[opIdx] || 0, true);
+            view.setUint32(offset + 24, readEstimates[opIdx] || 0, true);
+            view.setUint32(offset + 28, writeEstimates[opIdx] || 0, true);
+            view.setUint32(offset + 32, inputMagnitudes[opIdx] || 0, true);
+            offset += OPERATOR_DATA_SIZE;
+        }
+        
+        const header = new Uint8Array(13);
+        const headerView = new DataView(header.buffer);
+        headerView.setUint32(0, 0, true); // CRC32 not needed for config
+        headerView.setUint8(4, DERIVED_ARRAYS_CMD);
+        headerView.setUint32(5, chunkId, true); // chunk_id
+        headerView.setUint32(9, totalChunks, true); // total_chunks
+        
+        const packet = new Uint8Array(header.length + payload.byteLength);
+        packet.set(header, 0);
+        packet.set(new Uint8Array(payload), header.length);
+        
+        const frameHeader = new Uint8Array([0x00, 0x02]); // Add 2-byte frame header for raw data
+        const fullPacket = new Uint8Array(frameHeader.length + packet.length);
+        fullPacket.set(frameHeader, 0);
+        fullPacket.set(packet, frameHeader.length);
+        
+        console.log(`Sending chunk ${chunkId + 1}/${totalChunks}: ${operatorsInChunk} operators, ${payload.byteLength} bytes`);
+        
+        // Use the same handshake approach as model upload
+        let sent = false;
+        let retries = 0;
+        const maxRetries = 5;
+        
+        while (!sent && retries < maxRetries) {
+            try {
+                console.log(`Attempt ${retries + 1}: Sending derived arrays chunk ${chunkId}`);
+                await this.send(fullPacket);
+                console.log(`Derived arrays chunk ${chunkId} sent, waiting for ACK...`);
+                await this.waitForAck(chunkId, 2000);
+                console.log(`Derived arrays chunk ${chunkId} ACK received successfully`);
+                sent = true;
+            } catch (e) {
+                retries++;
+                console.log(`Derived arrays chunk ${chunkId} attempt ${retries} failed: ${e}`);
+                if (retries >= maxRetries) {
+                    console.error(`Derived arrays chunk ${chunkId} failed after ${maxRetries} retries: ${e}`);
+                    throw new Error(`Derived arrays chunk ${chunkId} failed after ${maxRetries} retries.`);
+                }
+            }
+        }
+    }
+    
+    console.log('All derived arrays chunks sent successfully');
+    
+    // Now send the string arrays
+    await this.sendStringArrays(macStrings, outputShapes, filterShapes);
+};
+
+// Send string arrays to EVB (chunked)
+serial.Port.prototype.sendStringArrays = async function(macStrings, outputShapes, filterShapes) {
+    console.log('Sending string arrays to EVB...');
+    const STRING_ARRAYS_CMD = 0x07; // New command type for string arrays
+    const numOperators = macStrings.length;
+    
+    // Use simpler chunking for string arrays - fixed number of operators per chunk
+    const CHUNK_SIZE = 480; // Same as derived arrays
+    const METADATA_SIZE = 8; // total_ops (4) + chunk_ops (4)
+    
+    // Use a conservative fixed number of operators per chunk to avoid size issues
+    const MAX_OPERATORS_PER_CHUNK = 8; // Fixed conservative value
+    
+    console.log(`String arrays chunking: total_ops=${numOperators}, max_ops_per_chunk=${MAX_OPERATORS_PER_CHUNK}`);
+    
+    const totalChunks = Math.ceil(numOperators / MAX_OPERATORS_PER_CHUNK);
+    console.log(`Sending string arrays in ${totalChunks} chunks`);
+    
+    for (let chunkId = 0; chunkId < totalChunks; chunkId++) {
+        const startIdx = chunkId * MAX_OPERATORS_PER_CHUNK;
+        const endIdx = Math.min(startIdx + MAX_OPERATORS_PER_CHUNK, numOperators);
+        const operatorsInChunk = endIdx - startIdx;
+        
+        console.log(`Sending string arrays chunk ${chunkId + 1}/${totalChunks}: operators ${startIdx}-${endIdx-1} (${operatorsInChunk} operators)`);
+        
+        // Calculate payload size for this chunk
+        let chunkPayloadSize = METADATA_SIZE; // total_ops + chunk_ops
+        
+        for (let i = startIdx; i < endIdx; i++) {
+            chunkPayloadSize += 12 + (macStrings[i] || "").length + (outputShapes[i] || "").length + (filterShapes[i] || "").length;
+        }
+        
+        const payload = new ArrayBuffer(chunkPayloadSize);
+        const view = new DataView(payload);
+        let offset = 0;
+        
+        // Pack metadata
+        view.setUint32(offset, numOperators, true); // total_operators
+        offset += 4;
+        view.setUint32(offset, operatorsInChunk, true); // operators_in_chunk
+        offset += 4;
+        
+        // Pack strings for this chunk
+        for (let i = startIdx; i < endIdx; i++) {
+            // MAC string
+            const macStr = macStrings[i] || "";
+            view.setUint32(offset, macStr.length, true);
+            offset += 4;
+            for (let j = 0; j < macStr.length; j++) {
+                view.setUint8(offset + j, macStr.charCodeAt(j));
+            }
+            offset += macStr.length;
+            
+            // Output shape string
+            const outputStr = outputShapes[i] || "";
+            view.setUint32(offset, outputStr.length, true);
+            offset += 4;
+            for (let j = 0; j < outputStr.length; j++) {
+                view.setUint8(offset + j, outputStr.charCodeAt(j));
+            }
+            offset += outputStr.length;
+            
+            // Filter shape string
+            const filterStr = filterShapes[i] || "";
+            view.setUint32(offset, filterStr.length, true);
+            offset += 4;
+            for (let j = 0; j < filterStr.length; j++) {
+                view.setUint8(offset + j, filterStr.charCodeAt(j));
+            }
+            offset += filterStr.length;
+        }
+        
+        const header = new Uint8Array(13);
+        const headerView = new DataView(header.buffer);
+        headerView.setUint32(0, 0, true); // CRC32 not needed for config
+        headerView.setUint8(4, STRING_ARRAYS_CMD);
+        headerView.setUint32(5, chunkId, true); // chunk_id
+        headerView.setUint32(9, totalChunks, true); // total_chunks
+        
+        const packet = new Uint8Array(header.length + payload.byteLength);
+        packet.set(header, 0);
+        packet.set(new Uint8Array(payload), header.length);
+        
+        const frameHeader = new Uint8Array([0x00, 0x02]); // Add 2-byte frame header for raw data
+        const fullPacket = new Uint8Array(frameHeader.length + packet.length);
+        fullPacket.set(frameHeader, 0);
+        fullPacket.set(packet, frameHeader.length);
+        
+        console.log(`Sending string arrays chunk ${chunkId + 1}: ${operatorsInChunk} operators, ${payload.byteLength} bytes`);
+        
+        // Send with retry logic
+        let sent = false;
+        let retries = 0;
+        const maxRetries = 5;
+        
+        while (!sent && retries < maxRetries) {
+            try {
+                console.log(`Attempt ${retries + 1}: Sending string arrays chunk ${chunkId + 1}`);
+                await this.send(fullPacket);
+                console.log(`String arrays chunk ${chunkId + 1} sent, waiting for ACK...`);
+                await this.waitForAck(chunkId, 2000);
+                console.log(`String arrays chunk ${chunkId + 1} ACK received successfully`);
+                sent = true;
+            } catch (e) {
+                retries++;
+                console.log(`String arrays chunk ${chunkId + 1} attempt ${retries} failed: ${e}`);
+                if (retries >= maxRetries) {
+                    console.error(`String arrays chunk ${chunkId + 1} failed after ${maxRetries} retries: ${e}`);
+                    throw new Error(`String arrays chunk ${chunkId + 1} failed after ${maxRetries} retries.`);
+                }
+            }
+        }
+    }
+    
+    console.log('All string arrays chunks sent successfully');
 };
 })();

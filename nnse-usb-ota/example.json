@@ -1,0 +1,42 @@
+{
+    "main": {
+      "results": {
+        "0": {
+          "value": 0.82,
+          "bgColor": "#00cc66",
+          "textColor": "#ffffff"
+        }
+      },
+      "thresholds": [
+        {
+          "value": 0.5,
+          "bgColor": "#ffcc00",
+          "textColor": "#000000"
+        },
+        {
+          "value": 0.8,
+          "bgColor": "#00cc66",
+          "textColor": "#ffffff"
+        },
+        {
+          "value": 1.0,
+          "bgColor": "#006600",
+          "textColor": "#ffffff"
+        }
+      ],
+      "gradient": [
+        {
+          "stop": 0.0,
+          "bgColor": "#ff0000"
+        },
+        {
+          "stop": 0.5,
+          "bgColor": "#ffff00"
+        },
+        {
+          "stop": 1.0,
+          "bgColor": "#00ff00"
+        }
+      ]
+    }
+  }

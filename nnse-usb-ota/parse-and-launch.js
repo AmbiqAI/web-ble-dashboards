@@ -100,6 +100,7 @@ function extractOperatorAttributes(op, model, subgraph, opName) {
   const opcode = model.operatorCodes(opcodeIndex).builtinCode();
   
   // Add basic operator info
+  attrs.push({ key: 'op_name', value: opName.toLowerCase() });
   attrs.push({ key: 'builtin_code', value: opcode.toString() });
   attrs.push({ key: 'operator_name', value: opName });
   
@@ -146,9 +147,9 @@ function extractOperatorAttributes(op, model, subgraph, opName) {
             attrs.push({ key: 'padding', value: conv2dOpts.padding().toString() });
             attrs.push({ key: 'stride_h', value: conv2dOpts.strideH().toString() });
             attrs.push({ key: 'stride_w', value: conv2dOpts.strideW().toString() });
-            attrs.push({ key: 'dilation_h', value: conv2dOpts.dilationHFactor().toString() });
-            attrs.push({ key: 'dilation_w', value: conv2dOpts.dilationWFactor().toString() });
-            attrs.push({ key: 'activation', value: conv2dOpts.fusedActivationFunction().toString() });
+            attrs.push({ key: 'dilation_h_factor', value: conv2dOpts.dilationHFactor().toString() });
+            attrs.push({ key: 'dilation_w_factor', value: conv2dOpts.dilationWFactor().toString() });
+            attrs.push({ key: 'fused_activation_function', value: conv2dOpts.fusedActivationFunction().toString() });
           }
           break;
           
@@ -159,7 +160,7 @@ function extractOperatorAttributes(op, model, subgraph, opName) {
             attrs.push({ key: 'stride_h', value: depthwiseOpts.strideH().toString() });
             attrs.push({ key: 'stride_w', value: depthwiseOpts.strideW().toString() });
             attrs.push({ key: 'depth_multiplier', value: depthwiseOpts.depthMultiplier().toString() });
-            attrs.push({ key: 'activation', value: depthwiseOpts.fusedActivationFunction().toString() });
+            attrs.push({ key: 'fused_activation_function', value: depthwiseOpts.fusedActivationFunction().toString() });
           }
           break;
           
@@ -172,14 +173,14 @@ function extractOperatorAttributes(op, model, subgraph, opName) {
             attrs.push({ key: 'stride_w', value: poolOpts.strideW().toString() });
             attrs.push({ key: 'filter_h', value: poolOpts.filterHeight().toString() });
             attrs.push({ key: 'filter_w', value: poolOpts.filterWidth().toString() });
-            attrs.push({ key: 'activation', value: poolOpts.fusedActivationFunction().toString() });
+            attrs.push({ key: 'fused_activation_function', value: poolOpts.fusedActivationFunction().toString() });
           }
           break;
           
         case tflite.BuiltinOperator.FULLY_CONNECTED:
           const fcOpts = tflite.FullyConnectedOptions.getRootAsFullyConnectedOptions(builtinOptions);
           if (fcOpts) {
-            attrs.push({ key: 'activation', value: fcOpts.fusedActivationFunction().toString() });
+            attrs.push({ key: 'fused_activation_function', value: fcOpts.fusedActivationFunction().toString() });
             attrs.push({ key: 'weights_format', value: fcOpts.weightsFormat().toString() });
           }
           break;
@@ -190,7 +191,7 @@ function extractOperatorAttributes(op, model, subgraph, opName) {
         case tflite.BuiltinOperator.DIV:
           const arithmeticOpts = tflite.ArithmeticOptions.getRootAsArithmeticOptions(builtinOptions);
           if (arithmeticOpts) {
-            attrs.push({ key: 'activation', value: arithmeticOpts.fusedActivationFunction().toString() });
+            attrs.push({ key: 'fused_activation_function', value: arithmeticOpts.fusedActivationFunction().toString() });
           }
           break;
           
@@ -254,44 +255,110 @@ export async function parseTFLiteFlatbufferToGraph(buffer, filename = 'model.tfl
     // Add basic attributes
     detailedAttrs.push(
       { key: 'index', value: i.toString() },
-      // { key: 'filename', value: filename }
+      { key: 'filename', value: filename }
     );
+
+    // Extract namespace from output tensor names
+    let namespace = '';
+    for (const outputIndex of outputIndices) {
+      const tensor = subgraph.tensors(outputIndex);
+      if (tensor && tensor.name()) {
+        const tensorName = tensor.name();
+        // Extract namespace from tensor name (e.g., "EfficientNetV2/stem.conv/Conv2D" -> "EfficientNetV2/stem.conv")
+        const parts = tensorName.split('/');
+        if (parts.length > 1) {
+          namespace = parts.slice(0, -1).join('/');
+          break;
+        }
+      }
+    }
 
     const node = {
       id: nodeId,
       label: `${opName} (${i})`,
-      namespace: '',  // Simplified namespace to avoid hierarchical layering
+      namespace: namespace,
       attrs: detailedAttrs,
       incomingEdges: incomingEdges,
-      // style: {
-      //   backgroundColor: getNodeColor(opName),
-      //   color: '#FFFFFF', // White text for contrast
-      //   borderColor: '#2C3E50',
-      //   borderWidth: 2,
-      //   borderRadius: 8,
-      //   fontSize: '12px',
-      //   fontWeight: 'bold'
-      // }
     };
 
-    // Add inputsMetadata if there are inputs - FIXED: Use proper array format
+    // Add inputsMetadata with proper tensor information
     if (inputIndices.length > 0) {
       node.inputsMetadata = [];
       for (let j = 0; j < inputIndices.length; j++) {
+        const inputTensor = subgraph.tensors(inputIndices[j]);
+        const inputAttrs = [];
+        
+        if (inputTensor) {
+          // Add tensor name
+          if (inputTensor.name()) {
+            inputAttrs.push({ key: 'tensor_name', value: inputTensor.name() });
+          }
+          
+          // Add shape
+          inputAttrs.push({ key: 'shape', value: getTensorShape(inputTensor) });
+          
+          // Add type
+          inputAttrs.push({ key: 'type', value: getTensorTypeName(inputTensor) });
+          
+          // Add quantization info if available
+          if (inputTensor.quantization()) {
+            const quant = inputTensor.quantization();
+            if (quant.scale() && quant.scale().length() > 0) {
+              inputAttrs.push({ key: 'quantization_scale', value: quant.scale(0).toString() });
+            }
+            if (quant.zeroPoint() && quant.zeroPoint().length() > 0) {
+              inputAttrs.push({ key: 'quantization_zero_point', value: quant.zeroPoint(0).toString() });
+            }
+          }
+          
+          // Add tensor index
+          inputAttrs.push({ key: 'tensor_index', value: inputIndices[j].toString() });
+        }
+        
         node.inputsMetadata.push({
           id: `${j}`,
-          attrs: []
+          attrs: inputAttrs
         });
       }
     }
 
-    // Add outputsMetadata if there are outputs - FIXED: Use proper array format
+    // Add outputsMetadata with proper tensor information
     if (outputIndices.length > 0) {
       node.outputsMetadata = [];
       for (let j = 0; j < outputIndices.length; j++) {
+        const outputTensor = subgraph.tensors(outputIndices[j]);
+        const outputAttrs = [];
+        
+        if (outputTensor) {
+          // Add tensor name
+          if (outputTensor.name()) {
+            outputAttrs.push({ key: 'tensor_name', value: outputTensor.name() });
+          }
+          
+          // Add shape
+          outputAttrs.push({ key: 'shape', value: getTensorShape(outputTensor) });
+          
+          // Add type
+          outputAttrs.push({ key: 'type', value: getTensorTypeName(outputTensor) });
+          
+          // Add quantization info if available
+          if (outputTensor.quantization()) {
+            const quant = outputTensor.quantization();
+            if (quant.scale() && quant.scale().length() > 0) {
+              outputAttrs.push({ key: 'quantization_scale', value: quant.scale(0).toString() });
+            }
+            if (quant.zeroPoint() && quant.zeroPoint().length() > 0) {
+              outputAttrs.push({ key: 'quantization_zero_point', value: quant.zeroPoint(0).toString() });
+            }
+          }
+          
+          // Add tensor index
+          outputAttrs.push({ key: 'tensor_index', value: outputIndices[j].toString() });
+        }
+        
         node.outputsMetadata.push({
           id: `${j}`,
-          attrs: []
+          attrs: outputAttrs
         });
       }
     }

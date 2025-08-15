@@ -5,6 +5,10 @@
   <title>NNSE over USB - Autodeploy</title>
   <link href='https://fonts.googleapis.com/css?family=Roboto Mono' rel='stylesheet'>
   <!-- <script src="https://cdn.jsdelivr.net/npm/flatbuffers@23.5.26/lib/flatbuffers.min.js"></script> -->
+  
+  <!-- TensorFlow.js and TFLite plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.9/dist/tflite.min.js"></script>
 
 
   <style>
@@ -330,20 +334,20 @@
                         <input type="number" id="maxArenaSize" class="config-input" value="1024" min="1" max="8192">
                     </div>
                     <div class="config-row">
-                        <div class="config-label">Profile Enable:</div>
-                        <input type="checkbox" id="profileEnable" checked>
+                      <div class="config-label">Runs:</div>
+                      <input type="number" id="validationRuns" class="config-input" value="10" min="1" max="1000">
                     </div>
                     <div class="config-row">
                         <div class="config-label">Profile Warmup:</div>
                         <input type="number" id="profileWarmup" class="config-input" value="1" min="0" max="100">
                     </div>
                     <div class="config-row">
-                        <div class="config-label">Full PMU Capture:</div>
-                        <input type="checkbox" id="fullPmuCapture">
+                        <div class="config-label">Profile Enable:</div>
+                        <input type="checkbox" id="profileEnable" checked>
                     </div>
                     <div class="config-row">
-                        <div class="config-label">Runs:</div>
-                        <input type="number" id="validationRuns" class="config-input" value="10" min="1" max="1000">
+                        <div class="config-label">Full PMU Capture:</div>
+                        <input type="checkbox" id="fullPmuCapture">
                     </div>
                     <div class="config-row">
                         <button id="uploadModelButton" class="action-button" disabled>Upload Model</button>
