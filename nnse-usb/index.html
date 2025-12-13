@@ -1,383 +1,198 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>NNSE | USB Audio Studio</title>
-  <link href='https://fonts.googleapis.com/css?family=Roboto+Mono:400,700' rel='stylesheet'>
+  <title>NNSE | Pro Studio</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <style>
-    :root {
-      --bg-color: #0a0a0b;
-      --widget-bg: #141417;
-      --accent-neon: #d8f41d;
-      --accent-red: #FF355E;
-      --text-main: #DAE3E3;
-      --border-color: #2a2a2e;
-    }
-
+    :root { --bg: #0a0a0b; --w: #141417; --neon: #d8f41d; --red: #FF355E; --text: #DAE3E3; }
     * { box-sizing: border-box; font-family: 'Roboto Mono', monospace; }
-    
-    body { 
-      color: var(--text-main); 
-      background: var(--bg-color); 
-      margin: 0;
-      padding: 20px;
-      display: flex;
-      justify-content: center;
-    }
-
-    .dashboard {
-      width: 1000px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-gap: 15px;
-    }
-
-    /* Header & Status */
-    .header-bar {
-      grid-column: 1 / -1;
-      background: var(--widget-bg);
-      border: 1px solid var(--border-color);
-      padding: 15px 25px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-radius: 4px;
-    }
-
-    #pairButton {
-      background-color: var(--accent-neon);
-      border: none;
-      color: black;
-      font-weight: bold;
-      padding: 8px 24px;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.2s;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-
-    #pairButton:hover {
-      box-shadow: 0 0 15px rgba(216, 244, 29, 0.4);
-      transform: translateY(-1px);
-    }
-
-    #bluetooth {
-      font-size: 14px;
-      color: #888;
-    }
-
-    /* Widgets */
-    .widget {
-      background: var(--widget-bg);
-      border: 1px solid var(--border-color);
-      padding: 20px;
-      border-radius: 4px;
-      position: relative;
-    }
-
-    .widget-title {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      color: #666;
-      margin-bottom: 15px;
-      display: block;
-      border-left: 3px solid var(--accent-neon);
-      padding-left: 10px;
-    }
-
-    /* Waveform Canvas */
-    #waveformCanvas {
-      background: #000;
-      width: 100%;
-      height: 180px;
-      border-radius: 2px;
-    }
-
-    /* Audio Player */
-    .audio-container {
-      grid-column: 1 / -1;
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      background: #1a1a1e;
-      padding: 10px 20px;
-      border-radius: 4px;
-    }
-
-    audio {
-      flex-grow: 1;
-      filter: invert(100%) hue-rotate(180deg) brightness(1.5);
-      height: 35px;
-    }
-
-    /* Buttons */
-    button#saveWavBtn {
-      background: transparent;
-      border: 1px solid #444;
-      color: #aaa;
-      padding: 6px 12px;
-      font-size: 11px;
-      cursor: pointer;
-      margin-top: 15px;
-      border-radius: 3px;
-    }
-
-    button#saveWavBtn:hover {
-      border-color: var(--accent-neon);
-      color: var(--accent-neon);
-    }
-
-    #snackbar {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      background: #222;
-      border-left: 4px solid var(--accent-neon);
-      padding: 10px 20px;
-      font-size: 12px;
-      z-index: 100;
-    }
-
-    /* Latency Chart */
-    #SeLatency {
-      width: 100%;
-      height: 220px;
-    }
+    body { color: var(--text); background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
+    .dashboard { width: 1000px; display: grid; grid-template-columns: 1fr 1fr; grid-gap: 15px; }
+    .header-bar { grid-column: 1 / -1; background: var(--w); border: 1px solid #2a2a2e; padding: 15px 25px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px; }
+    #pairButton { background: var(--neon); border: none; color: #000; font-weight: bold; padding: 8px 24px; border-radius: 4px; cursor: pointer; }
+    .widget { background: var(--w); border: 1px solid #2a2a2e; padding: 20px; border-radius: 4px; }
+    .widget-title { font-size: 11px; text-transform: uppercase; color: #666; margin-bottom: 15px; border-left: 3px solid var(--neon); padding-left: 10px; }
+    #waveformCanvas { background: #000; width: 100%; height: 180px; }
+    .perf-metrics { margin-top: 10px; padding: 10px; background: #000; font-size: 10px; color: #555; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .perf-val { color: var(--neon); font-weight: bold; }
+    .audio-container { grid-column: 1 / -1; background: #1a1a1e; padding: 10px; border-radius: 4px; }
+    audio { width: 100%; filter: invert(100%); }
+    .export-btn { width: 100%; background: var(--red); color: #fff; border: none; padding: 12px; cursor: pointer; margin-top: 10px; font-weight: bold; text-transform: uppercase; border-radius: 4px; }
+    .export-btn:active { transform: scale(0.98); }
   </style>
 </head>
-
 <body>
     <div class="dashboard">
-        <div id="snackbar">System Ready...</div>
-
         <header class="header-bar">
-            <div>
-              <span style="font-weight: bold; font-size: 18px; color: var(--accent-neon);">NNSE</span>
-              <span style="color: #555; margin-left: 10px;">USB v2.0</span>
-            </div>
-            <div id="bluetooth">DISCONNECTED</div>
-            <button id="pairButton">Connect Device</button>
+            <div style="color: var(--neon); font-weight: bold;">NNSE v2.0</div>
+            <div id="status">DISCONNECTED</div>
+            <button id="pairButton">CONNECT DEVICE</button>
         </header>
 
         <div class="widget">
-            <span class="widget-title">Audio Spectrum (6s buffer)</span>
+            <span class="widget-title">Live Waveform</span>
+            <input type="range" id="gainSlider" min="0" max="50" value="20" style="width:100%; accent-color:var(--neon);">
+            <div style="font-size: 10px; margin: 5px 0;">GAIN: <span id="gainVal">20</span>x</div>
             <canvas id="waveformCanvas" width="460" height="180"></canvas>
-            <button id="saveWavBtn">EXPORT .WAV</button>
+            
+            <div class="perf-metrics">
+                <div>Draw: <span id="drawTime" class="perf-val">0</span>ms</div>
+                <div>Plotly: <span id="plotlyTime" class="perf-val">0</span>ms</div>
+                <div style="grid-column: 1/-1; border-top: 1px solid #222; padding-top: 5px; display:flex; justify-content:space-between; align-items:center;">
+                    <span>PEAK: <span id="peakTime" style="color:var(--red)">0</span>ms</span>
+                    <button onclick="maxFrameTime=0; document.getElementById('peakTime').innerText='0'" style="font-size:9px; background:none; border:1px solid #444; color:#888; cursor:pointer; padding:2px 5px;">RESET</button>
+                </div>
+            </div>
+            <button id="saveWavBtn" class="export-btn">Download .WAV Recording</button>
         </div>
 
         <div class="widget">
             <span class="widget-title">Engine Metrics</span>
-            <div id="SeLatency"></div>
+            <div id="SeLatency" style="width:100%; height:250px;"></div>
         </div>
 
-        <div class="audio-container">
-            <span style="font-size: 10px; color: #666;">MONITOR</span>
-            <audio controls></audio>
-        </div>
+        <div class="audio-container"><audio controls id="monitor"></audio></div>
     </div>
 
-<script src="serial.js"></script>
-<script>
-    // --- 1. Global Setup & Worker Init ---
-    const audioWorker = new Worker('worker.js');
-    const SAMPLE_RATE = 48000;
-    const DISPLAY_SECONDS = 6;
-    const TOTAL_SAMPLES = SAMPLE_RATE * DISPLAY_SECONDS;
-    
-    let isPlotting = false; 
-    let chunkNum = 0;
-    let opusLatency = 0;
-    let seEnabledFlag = 0;
-    let platform = 0;
-
-    // Ring Buffer & Canvas Setup
-    let ringBuffer = new Float32Array(TOTAL_SAMPLES);
-    let writePtr = 0;
-    const canvas = document.getElementById('waveformCanvas');
-    const ctx = canvas.getContext('2d');
-
-    // UI Elements
-    const BLEstatus = document.getElementById('bluetooth');
-    const pairButton = document.getElementById('pairButton');
-
-    // Audio Decoder & Output
-    const audioDecoder = new AudioDecoder({output: decodeToQueue2, error: onAudioError});
-    audioDecoder.configure({ codec: "opus", sampleRate: SAMPLE_RATE, numberOfChannels: 1 });
-
-    const generator = new MediaStreamTrackGenerator({ kind: 'audio' });
-    const audioWriter = generator.writable.getWriter();
-    document.querySelector('audio').srcObject = new MediaStream([generator]);
-
-    let decoderController;
-    const decoderStream = new ReadableStream({ start(c) { decoderController = c; } });
-
-    // --- 2. Worker Communication ---
-    audioWorker.onmessage = function(e) {
-        if (e.data.type === 'WAV_BLOB') {
-            const url = URL.createObjectURL(e.data.blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `nnse_recording_${Date.now()}.wav`;
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-        }
-    };
-
-    async function decodeToQueue2(audioData) {
-        // --- PHASE 1: DATA EXTRACTION ---
-        const ab = new Float32Array(960);
-        audioData.copyTo(ab, {planeIndex: 0});
-        for (let i = 0; i < ab.length; i++) { ab[i] = ab[i] * 20; }
-
-        // --- PHASE 2: SAVING (Worker) ---
-        // Immediate forward to the "Vault" thread
-        audioWorker.postMessage({ type: 'RECORD_CHUNK', payload: new Float32Array(ab) });
-
-        // --- PHASE 3: PLAYBACK (Highest Priority) ---
-        decoderController.enqueue(audioData.duration);
+    <script src="serial.js"></script>
+    <script>
+        // Start Worker
+        const audioWorker = new Worker('worker.js');
         
-        // We do not 'await' this to prevent blocking the USB loop
-        audioWriter.write(audioData).then(() => {
-            // OPTIONAL: Monitor Playback Health
-            // desiredSize tells us how many more samples the hardware wants.
-            // If this number is very high, it means the hardware buffer is nearly empty (Dangerous).
-            if (audioWriter.desiredSize > 5000) {
-                console.warn("Playback buffer is getting low!");
+        const SAMPLE_RATE = 48000;
+        const TOTAL_SAMPLES = SAMPLE_RATE * 6;
+        let isPlotting = false, chunkNum = 0, currentGain = 20, maxFrameTime = 0;
+        let ringBuffer = new Float32Array(TOTAL_SAMPLES), writePtr = 0;
+        let latestPieData = { inference: 0, encoder: 0, seEnabled: 0 };
+
+        // Handle File Download from Worker
+        audioWorker.onmessage = (e) => {
+            if (e.data.type === 'WAV_BLOB') {
+                console.log("Worker sent WAV. Downloading...");
+                const url = URL.createObjectURL(e.data.blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `NNSE_Studio_${Date.now()}.wav`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
             }
-        }).catch(e => console.error("Hardware starvation!", e));
+        };
 
-        // --- PHASE 4: UPDATE 6s RING BUFFER ---
-        for (let i = 0; i < ab.length; i++) {
-            ringBuffer[(writePtr + i) % TOTAL_SAMPLES] = ab[i];
-        }
-        writePtr = (writePtr + ab.length) % TOTAL_SAMPLES;
+        document.getElementById('gainSlider').oninput = (e) => { 
+            currentGain = e.target.value; 
+            document.getElementById('gainVal').innerText = currentGain; 
+        };
 
-        // --- PHASE 5: DRAWING (Lossy) ---
-        if (!isPlotting) {
-            isPlotting = true;
-            requestAnimationFrame(drawWaveform); 
-        }
-    }
+        const audioDecoder = new AudioDecoder({output: decodeToQueue2, error: console.error});
+        audioDecoder.configure({ codec: "opus", sampleRate: SAMPLE_RATE, numberOfChannels: 1 });
 
-    function drawWaveform() {
-        // 1. Clear Canvas
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // 2. Setup Line Style
-        ctx.beginPath();
-        ctx.strokeStyle = '#FF355E';
-        ctx.lineWidth = 1;
+        const generator = new MediaStreamTrackGenerator({ kind: 'audio' });
+        const audioWriter = generator.writable.getWriter();
+        document.getElementById('monitor').srcObject = new MediaStream([generator]);
 
-        // 3. Calculate "Samples Per Pixel"
-        // (288,000 samples / 400 pixels = 720 samples per pixel)
-        const samplesPerPixel = Math.floor(TOTAL_SAMPLES / canvas.width); 
-        
-        for (let x = 0; x < canvas.width; x++) {
-            // Find the 720 samples for this specific pixel column
-            // We start from the oldest data (writePtr)
-            let startIdx = (writePtr + (x * samplesPerPixel)) % TOTAL_SAMPLES;
+        let decoderController;
+        new ReadableStream({ start(c) { decoderController = c; } });
+
+        async function decodeToQueue2(audioData) {
+            const tStart = performance.now();
+            const ab = new Float32Array(960);
+            audioData.copyTo(ab, {planeIndex: 0});
+            for (let i = 0; i < ab.length; i++) { ab[i] *= currentGain; }
             
-            let min = 1.0;
-            let max = -1.0;
+            // Send to recorder thread
+            audioWorker.postMessage({ type: 'RECORD_CHUNK', payload: ab });
 
-            // Find the Min/Max (The Envelope) in this slice
-            for (let i = 0; i < samplesPerPixel; i++) {
-                let s = ringBuffer[(startIdx + i) % TOTAL_SAMPLES];
-                if (s < min) min = s;
-                if (s > max) max = s;
+            decoderController?.enqueue(audioData.duration);
+            audioWriter.write(audioData).catch(()=>{});
+
+            for (let i = 0; i < ab.length; i++) { ringBuffer[(writePtr + i) % TOTAL_SAMPLES] = ab[i]; }
+            writePtr = (writePtr + ab.length) % TOTAL_SAMPLES;
+
+            if (!isPlotting) {
+                isPlotting = true;
+                requestAnimationFrame(() => {
+                    const dStart = performance.now();
+                    drawWaveform();
+                    const dEnd = performance.now();
+                    document.getElementById('drawTime').innerText = (dEnd - dStart).toFixed(2);
+                    const total = dEnd - tStart;
+                    if (total > maxFrameTime) { 
+                        maxFrameTime = total; 
+                        document.getElementById('peakTime').innerText = maxFrameTime.toFixed(2); 
+                    }
+                    isPlotting = false;
+                });
             }
-
-            // Map audio values (-1 to 1) to canvas height
-            let yMin = (min + 1) * (canvas.height / 2);
-            let yMax = (max + 1) * (canvas.height / 2);
-
-            // Draw the vertical line for this pixel
-            ctx.moveTo(x, yMin);
-            ctx.lineTo(x, yMax);
         }
-        
-        ctx.stroke();
-        isPlotting = false; // Reset the gate for the next frame
-    }
-    function saveWavFromBuffer() {
-        audioWorker.postMessage({ type: 'GENERATE_WAV' });
-    }
 
-    // --- 4. USB / Data Handlers ---
-    async function old_usbConnect() {
-        // Change this in your connect function
-        pairButton.style.backgroundColor = 'transparent';
-        pairButton.style.border = '1px solid var(--accent-neon)';
-        pairButton.style.color = 'var(--accent-neon)';
-        pairButton.innerHTML = "SYSTEM LIVE";
-        
-        serial.requestPort().then(selectedPort => {
-            port = selectedPort;
-            port.connect().then(() => {
-                port.onReceive = data => decodeAndDisplay(data);
-                pairButton.style.backgroundColor = 'green';
-                pairButton.style.color = 'white';
-                pairButton.innerHTML = "CONNECTED";
-                msg('Connected');
-                initGraph('SeLatency');
+        function drawWaveform() {
+            const canvas = document.getElementById('waveformCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath(); ctx.strokeStyle = '#FF355E';
+            const step = Math.floor(TOTAL_SAMPLES / canvas.width);
+            for (let x = 0; x < canvas.width; x++) {
+                let start = (writePtr + (x * step)) % TOTAL_SAMPLES;
+                let min = 1, max = -1;
+                for (let i = 0; i < step; i++) {
+                    let s = ringBuffer[(start + i) % TOTAL_SAMPLES];
+                    if (s < min) min = s; if (s > max) max = s;
+                }
+                ctx.moveTo(x, (min + 1) * 90); ctx.lineTo(x, (max + 1) * 90);
+            }
+            ctx.stroke();
+        }
+
+        setInterval(() => {
+            if (document.getElementById('status').innerText !== "CONNECTED") return;
+            const pStart = performance.now();
+            let myLat = (latestPieData.seEnabled == 0 ? 0 : latestPieData.inference / 1000) * 100;
+            let myOpus = latestPieData.encoder * 50;
+            let idle = 1000 - myLat - myOpus;
+
+            Plotly.react('SeLatency', [{
+                labels: ['AI', 'Enc', 'Idle'],
+                values: [myLat, myOpus, idle],
+                type: 'pie',
+                marker: { colors: ['#00ff00', '#ffff00', '#0000ff'] }
+            }], { 
+                plot_bgcolor: '#111', paper_bgcolor: '#111', margin: {l:10,r:10,b:10,t:10}, font: {color:'#888', size:10} 
+            }).then(() => {
+                document.getElementById('plotlyTime').innerText = (performance.now() - pStart).toFixed(2);
             });
-        }).catch(error => { msg(error); pairButton.style.backgroundColor = "#d8f41d"; });
-    }
+        }, 250);
 
-    function decodeAndDisplay(data) {
-        let type = data.getUint8(0);
-        let length = data.getUint8(1);
-        platform = data.getUint8(2);
-
-        if (type == 0x1) {
-            seEnabledFlag = data.getUint8(3);
-            msg(seEnabledFlag == 0 ? 'SE mode: disabled' : 'SE mode: enabled');
-        } else if (type == 0x2) {
-            handleSeLatencyNotifications(data.getUint32(3, true));
-        } else if (type == 0x3) {
-            handleOpusLatencyNotifications(data.getUint32(3, true));
-        } else if (type == 0x4) {
-            let audioData = new DataView(data.buffer, data.byteOffset + 3, length);
-            handleNotifications(audioData);
+        function decodeAndDisplay(data) {
+            let type = data.getUint8(0);
+            if (type == 0x1) latestPieData.seEnabled = data.getUint8(3);
+            else if (type == 0x2) latestPieData.inference = data.getUint32(3, true);
+            else if (type == 0x3) latestPieData.encoder = data.getUint32(3, true) / 1000;
+            else if (type == 0x4) {
+                audioDecoder.decode(new EncodedAudioChunk({
+                    type: "key", data: new DataView(data.buffer, data.byteOffset + 3, data.getUint8(1)),
+                    timestamp: chunkNum * 20000, duration: 20000
+                }));
+                chunkNum++;
+            }
         }
-    }
 
-    function handleNotifications(value) {
-        const init = { type: "key", data: value, timestamp: chunkNum * 20000, duration: 20000 };
-        chunkNum++;
-        audioDecoder.decode(new EncodedAudioChunk(init));
-    }
+        document.getElementById('pairButton').onclick = async () => {
+            serial.requestPort().then(port => {
+                port.connect().then(() => {
+                    port.onReceive = data => decodeAndDisplay(data);
+                    document.getElementById('status').innerText = "CONNECTED";
+                    Plotly.newPlot('SeLatency', [{ labels: ['Idle'], values: [100], type: 'pie' }], { plot_bgcolor: '#111', paper_bgcolor: '#111', font: {color:'#888'} });
+                });
+            });
+        };
 
-    function handleSeLatencyNotifications(value) {
-        let latency = seEnabledFlag == 0 ? 0 : value / 1000;
-        let myOpusLatency = opusLatency * 50;
-        let myLatency = latency * 100;
-        let idle = 1000 - myLatency - myOpusLatency;
-
-        Plotly.newPlot('SeLatency', [{
-            labels: ['AI Inference', 'Encoder', 'Idle'],
-            values: [myLatency, myOpusLatency, idle],
-            type: 'pie',
-            marker: { colors: ['rgb(0, 204, 0)', 'rgb(255, 255, 0)', 'rgb(0, 0, 195)'] }
-        }], { 
-            plot_bgcolor: '#111111', paper_bgcolor: '#111111', 
-            margin: { l: 8, r: 8, b: 18, t: 18 },
-            height: 200, width: 400 
-        });
-    }
-
-    function handleOpusLatencyNotifications(value) { opusLatency = value / 1000; }
-    function onAudioError(e) { console.error(e); }
-    function msg(m) { BLEstatus.innerHTML = m; }
-    function initGraph(id) { 
-        Plotly.newPlot(id, [{ labels: ['Idle'], values: [100], type: 'pie' }], { plot_bgcolor: '#111111', paper_bgcolor: '#111111' }); 
-    }
-
-    document.getElementById('saveWavBtn').onclick = saveWavFromBuffer;
-    pairButton.onclick = old_usbConnect;
-</script>
+        // Export Trigger
+        document.getElementById('saveWavBtn').onclick = () => {
+            console.log("Requesting export...");
+            audioWorker.postMessage({ type: 'GENERATE_WAV' });
+        };
+    </script>
 </body>
 </html>
