@@ -31,8 +31,8 @@
 
         <div class="widget">
             <span class="widget-title">Live Waveform</span>
-            <input type="range" id="gainSlider" min="0" max="50" value="20" style="width:100%; accent-color:var(--neon);">
-            <div style="font-size: 10px; margin: 5px 0;">GAIN: <span id="gainVal">20</span>x</div>
+            <input type="range" id="gainSlider" min="0" max="50" value="1" style="width:100%; accent-color:var(--neon);">
+            <div style="font-size: 10px; margin: 5px 0;">GAIN: <span id="gainVal">1</span>x</div>
             <canvas id="waveformCanvas" width="460" height="180"></canvas>
             
             <div class="perf-metrics">
@@ -61,7 +61,7 @@
         
         const SAMPLE_RATE = 48000;
         const TOTAL_SAMPLES = SAMPLE_RATE * 6;
-        let isPlotting = false, chunkNum = 0, currentGain = 20, maxFrameTime = 0;
+        let isPlotting = false, chunkNum = 0, currentGain = 1, maxFrameTime = 0;
         let ringBuffer = new Float32Array(TOTAL_SAMPLES), writePtr = 0;
         let latestPieData = { inference: 0, encoder: 0, seEnabled: 0 };
 
