@@ -31,8 +31,9 @@
 
         <div class="widget">
             <span class="widget-title">Live Waveform</span>
-            <input type="range" id="gainSlider" min="0" max="50" value="1" style="width:100%; accent-color:var(--neon);">
-            <div style="font-size: 10px; margin: 5px 0;">GAIN: <span id="gainVal">1</span>x</div>
+            <input type="range" id="gainSlider" min="-40" max="20" step="1" value="0" style="width:100%; accent-color:var(--neon);">
+            <div style="font-size: 10px; margin: 5px 0;">GAIN: <span id="gainVal">0</span> dB</div>
+            
             <canvas id="waveformCanvas" width="460" height="180"></canvas>
             
             <div class="perf-metrics">
@@ -80,9 +81,11 @@
             }
         };
 
+        // dB to Linear conversion: multiplier = 10^(dB/20)
         document.getElementById('gainSlider').oninput = (e) => { 
-            currentGain = e.target.value; 
-            document.getElementById('gainVal').innerText = currentGain; 
+            const db = parseFloat(e.target.value);
+            currentGain = Math.pow(10, db / 20); 
+            document.getElementById('gainVal').innerText = db; 
         };
 
         const audioDecoder = new AudioDecoder({output: decodeToQueue2, error: console.error});
@@ -99,6 +102,8 @@
             const tStart = performance.now();
             const ab = new Float32Array(960);
             audioData.copyTo(ab, {planeIndex: 0});
+            
+            // Apply the gain multiplier derived from the dB slider
             for (let i = 0; i < ab.length; i++) { ab[i] *= currentGain; }
             
             // Send to recorder thread
