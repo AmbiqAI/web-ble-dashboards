@@ -1,29 +1,30 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>NNSE | Pro Studio</title>
+  <title>NNSE | Pro Studio XL</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <style>
     :root { --bg: #0a0a0b; --w: #141417; --neon: #d8f41d; --red: #FF355E; --text: #DAE3E3; }
     * { box-sizing: border-box; font-family: 'Roboto Mono', monospace; }
     body { color: var(--text); background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
     
-    .dashboard { width: 1000px; display: grid; grid-template-columns: 1fr 1fr; grid-gap: 15px; }
+    .dashboard { width: 1250px; display: grid; grid-template-columns: 1fr 1fr; grid-gap: 15px; }
     
     .header-bar { grid-column: 1 / -1; background: var(--w); border: 1px solid #2a2a2e; padding: 15px 25px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px; }
     #pairButton { background: var(--neon); border: none; color: #000; font-weight: bold; padding: 8px 24px; border-radius: 4px; cursor: pointer; }
     
     .widget { background: var(--w); border: 1px solid #2a2a2e; padding: 20px; border-radius: 4px; display: flex; flex-direction: column; }
     
+    .hero-widget { grid-column: 1 / -1; background: var(--w); border: 1px solid #2a2a2e; padding: 10px; border-radius: 4px; }
+
     .widget-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
     .widget-title { font-size: 11px; text-transform: uppercase; color: #666; border-left: 3px solid var(--neon); padding-left: 10px; }
     .select-opt { background: #000; color: #888; border: 1px solid #333; font-size: 10px; padding: 2px 5px; border-radius: 2px; cursor: pointer; }
 
-    /* LAYOUT: 2x2 GRID */
     .vis-container { 
         display: grid; 
-        grid-template-columns: 1fr 40px; 
-        grid-template-rows: 100px 100px; 
+        grid-template-columns: 1fr 50px; 
+        grid-template-rows: 150px 300px; 
         gap: 4px; 
         background: #000; 
         padding: 4px; 
@@ -57,39 +58,49 @@
     
     .export-btn { width: 100%; background: var(--red); color: #fff; border: none; padding: 12px; cursor: pointer; margin-top: 10px; font-weight: bold; text-transform: uppercase; border-radius: 4px; }
     .export-btn:active { transform: scale(0.98); }
+
+    .control-row { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; }
   </style>
 </head>
 <body>
     <div class="dashboard">
         <header class="header-bar">
-            <div style="color: var(--neon); font-weight: bold;">NNSE v2.0</div>
+            <div style="color: var(--neon); font-weight: bold;">NNSE v2.2 XL Sync</div>
             <div id="status">DISCONNECTED</div>
             <button id="pairButton">CONNECT DEVICE</button>
         </header>
 
-        <div class="widget">
+        <div class="hero-widget">
             <div class="widget-header">
-                <span class="widget-title">Live Monitor (6s | 8kHz)</span>
-                <select id="fftSelect" class="select-opt">
-                    <option value="512">FFT: 512 (Fast)</option>
-                    <option value="1024">FFT: 1024 (Detail)</option>
-                </select>
+                <span class="widget-title">Live Spectrum Analyzer (6s Window)</span>
+                <div class="control-row" style="margin-bottom:0;">
+                    <select id="fftSelect" class="select-opt">
+                        <option value="512">FFT: 512 (Fast)</option>
+                        <option value="1024">FFT: 1024 (Detail)</option>
+                        <option value="2048">FFT: 2048 (Max)</option>
+                    </select>
+                </div>
             </div>
-            
-            <input type="range" id="gainSlider" min="-40" max="20" step="1" value="0" style="width:100%; accent-color:var(--neon);">
-            <div style="font-size: 10px; margin: 5px 0;">GAIN: <span id="gainVal">0</span> dB</div>
-            
+
             <div class="vis-container">
-                <canvas id="waveformCanvas" width="300" height="100"></canvas>
-                <canvas id="spectrogramCanvas" width="300" height="100"></canvas>
-                <canvas id="legendCanvas" width="40" height="100"></canvas>
+                <canvas id="waveformCanvas" width="1200" height="150"></canvas>
+                <canvas id="spectrogramCanvas" width="1200" height="300"></canvas>
+                <canvas id="legendCanvas" width="50" height="300"></canvas>
             </div>
-            
+        </div>
+
+        <div class="widget">
+            <span class="widget-title">Input & Capture</span>
+            <div style="margin: 15px 0;">
+                <input type="range" id="gainSlider" min="-40" max="20" step="1" value="0" style="width:100%; accent-color:var(--neon);">
+                <div style="font-size: 10px; margin: 5px 0;">DIGITAL GAIN: <span id="gainVal">0</span> dB</div>
+            </div>
+
             <div class="perf-metrics">
                 <div>Draw: <span id="drawTime" class="perf-val">0</span>ms</div>
                 <div>Spec: <span id="specTime" class="perf-val">0</span>ms</div>
                 <div style="grid-column: 1/-1; border-top: 1px solid #222; padding-top: 5px; display:flex; justify-content:space-between; align-items:center;">
-                    <span>PEAK: <span id="peakTime" style="color:var(--red)">0</span>ms</span>
+                    <span>PEAK FRAME: <span id="peakTime" style="color:var(--red)">0</span>ms</span>
                     <button onclick="maxFrameTime=0; document.getElementById('peakTime').innerText='0'" style="font-size:9px; background:none; border:1px solid #444; color:#888; cursor:pointer; padding:2px 5px;">RESET</button>
                 </div>
             </div>
@@ -97,8 +108,8 @@
         </div>
 
         <div class="widget">
-            <span class="widget-title">Engine Metrics</span>
-            <div id="SeLatency" style="width:100%; height:250px;"></div>
+            <span class="widget-title">Engine Latency</span>
+            <div id="SeLatency" style="width:100%; height:180px;"></div>
         </div>
 
         <div class="audio-container"><audio controls id="monitor"></audio></div>
@@ -108,10 +119,16 @@
     <script>
         const audioWorker = new Worker('worker.js');
         const SAMPLE_RATE = 48000;
-        const TOTAL_SAMPLES = SAMPLE_RATE * 6; 
+        const TOTAL_SAMPLES = SAMPLE_RATE * 6; // 6 Seconds
         
         let chunkNum = 0, currentGain = 1, maxFrameTime = 0;
-        let ringBuffer = new Float32Array(TOTAL_SAMPLES), writePtr = 0;
+        let ringBuffer = new Float32Array(TOTAL_SAMPLES);
+        let writePtr = 0; 
+        let syncPtr = 0; // Visual sync pointer
+        
+        // Scale Factor: 1200px width / 300 chunks (in 6s) = 4 pixels per chunk
+        const PX_PER_CHUNK = 4;
+
         let latestPieData = { inference: 0, encoder: 0, seEnabled: 0 };
         let spectroQueue = [];
 
@@ -149,7 +166,7 @@
         tempCanvas.height = specCanvas.height;
         const tempCtx = tempCanvas.getContext('2d');
 
-        // Color Map & Legend
+        // Color Map
         const colorMap = new Uint8ClampedArray(256 * 4);
         function hexToRgb(hex) {
             let bigint = parseInt(hex.replace('#',''), 16);
@@ -185,12 +202,12 @@
                 let idx = Math.floor((1 - (y / lCanvas.height)) * 255);
                 let r = colorMap[idx*4+0], g = colorMap[idx*4+1], b = colorMap[idx*4+2];
                 lCtx.fillStyle = `rgb(${r},${g},${b})`;
-                lCtx.fillRect(0, y, 15, 1);
+                lCtx.fillRect(0, y, 50, 1);
             }
-            lCtx.fillStyle = '#666'; lCtx.font = '9px monospace';
-            lCtx.fillText('+10', 18, 10);
-            lCtx.fillText('-35', 18, lCanvas.height/2 + 3);
-            lCtx.fillText('-80', 18, lCanvas.height - 2);
+            lCtx.fillStyle = '#fff'; lCtx.font = '10px monospace';
+            lCtx.fillText('+10', 15, 15);
+            lCtx.fillText('-35', 15, lCanvas.height/2 + 3);
+            lCtx.fillText('-80', 15, lCanvas.height - 5);
         }
         createGradient();
 
@@ -235,14 +252,29 @@
             let processedChunks = 0;
             const specStart = performance.now();
             
-            // Safety limit to prevent freeze
-            const maxChunksPerFrame = 10;
-            
-            while (spectroQueue.length > 0 && processedChunks < maxChunksPerFrame) {
-                const chunk = spectroQueue.shift();
-                updateSpectrogram(chunk);
-                processedChunks++;
-                if (performance.now() - specStart > 12) break; 
+            // Optimization: Process multiple chunks in one batch shift
+            // This prevents "shifting" the canvas 10 times per frame
+            const available = spectroQueue.length;
+            if (available > 0) {
+                // Determine how many we can process in this frame (limit to avoid lag)
+                const toProcess = Math.min(available, 10);
+                
+                // 1. Shift Canvas ONCE by (toProcess * PX_PER_CHUNK)
+                const shiftAmt = toProcess * PX_PER_CHUNK;
+                tempCtx.drawImage(specCanvas, 0, 0);
+                specCtx.drawImage(tempCanvas, -shiftAmt, 0);
+                
+                // 2. Draw the new strips
+                for (let i = 0; i < toProcess; i++) {
+                    const chunk = spectroQueue.shift();
+                    
+                    // Draw Spectrogram Strip (4px wide)
+                    drawSpectrogramStrip(chunk, toProcess - 1 - i); 
+                    
+                    // Advance Sync Pointer
+                    syncPtr = (syncPtr + chunk.length) % TOTAL_SAMPLES;
+                    processedChunks++;
+                }
             }
             const specEnd = performance.now();
 
@@ -279,17 +311,23 @@
 
         function drawWaveform() {
             const canvas = document.getElementById('waveformCanvas');
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const ctx = canvas.getContext('2d', { alpha: false });
+            const w = canvas.width;
+            const h = canvas.height;
+            const halfH = h / 2;
+
+            ctx.fillStyle = '#000'; 
+            ctx.fillRect(0, 0, w, h);
             ctx.beginPath(); ctx.strokeStyle = '#FF355E'; ctx.lineWidth = 1;
             
-            const step = Math.floor(TOTAL_SAMPLES / 300); 
-            const halfH = canvas.height / 2;
+            const step = Math.floor(TOTAL_SAMPLES / w); 
+            const skip = Math.max(1, Math.floor(step / 10)); 
 
-            for (let x = 0; x < 300; x++) {
-                let start = (writePtr + (x * step)) % TOTAL_SAMPLES;
-                let min = 1, max = -1;
-                for (let i = 0; i < step; i+=16) { 
+            // Use syncPtr so Waveform matches Spectrogram timing exactly
+            for (let x = 0; x < w; x++) {
+                let start = (syncPtr + (x * step)) % TOTAL_SAMPLES;
+                let min = 1.0, max = -1.0;
+                for (let i = 0; i < step; i += skip) { 
                     let s = ringBuffer[(start + i) % TOTAL_SAMPLES];
                     if (s < min) min = s; if (s > max) max = s;
                 }
@@ -300,14 +338,13 @@
             ctx.stroke();
         }
 
-        function updateSpectrogram(newChunk) {
-            tempCtx.drawImage(specCanvas, 0, 0);
-            specCtx.drawImage(tempCanvas, -1, 0); 
-
+        function drawSpectrogramStrip(newChunk, offsetIndex) {
             const mags = computeFFT(newChunk);
             const h = specCanvas.height;
             const w = specCanvas.width;
             const visibleBins = Math.floor(DISPLAY_FREQ_MAX * CURRENT_FFT_SIZE / SAMPLE_RATE);
+            
+            // Create a 1px wide strip
             const imgData = specCtx.createImageData(1, h);
             const data = imgData.data;
 
@@ -320,13 +357,31 @@
                 if (normalized < 0) normalized = 0; if (normalized > 1) normalized = 1;
 
                 const colorIdx = Math.floor(normalized * 255);
-                const pixelIndex = y * 4;
-                data[pixelIndex + 0] = colorMap[colorIdx * 4 + 0]; 
-                data[pixelIndex + 1] = colorMap[colorIdx * 4 + 1]; 
-                data[pixelIndex + 2] = colorMap[colorIdx * 4 + 2]; 
-                data[pixelIndex + 3] = 255; 
+                const p = y * 4;
+                data[p+0] = colorMap[colorIdx*4+0]; 
+                data[p+1] = colorMap[colorIdx*4+1]; 
+                data[p+2] = colorMap[colorIdx*4+2]; 
+                data[p+3] = 255; 
             }
-            specCtx.putImageData(imgData, w - 1, 0);
+            
+            // Stretch it to PX_PER_CHUNK (4px)
+            // We draw the 1px strip, then stretch it via drawImage if needed, 
+            // or simpler: putImageData 4 times? 
+            // Faster: Create a temporary tiny canvas for the strip if we want smoothing,
+            // But for raw speed, let's just fill the 4 columns with the same data.
+            
+            // Calculate where this strip goes. 
+            // If we shifted by (toProcess * 4), the first one goes at w - (toProcess*4), etc.
+            // But the logic inside renderLoop shifted everything left.
+            // So we just need to fill the gap at the right.
+            // If offsetIndex is 0 (last one), it goes at w-4.
+            // If offsetIndex is 1 (second to last), it goes at w-8.
+            
+            const xPos = w - ((offsetIndex + 1) * PX_PER_CHUNK);
+            
+            for (let k = 0; k < PX_PER_CHUNK; k++) {
+                specCtx.putImageData(imgData, xPos + k, 0);
+            }
         }
 
         document.getElementById('gainSlider').oninput = (e) => { 
@@ -339,7 +394,7 @@
             if (e.data.type === 'WAV_BLOB') {
                 const url = URL.createObjectURL(e.data.blob);
                 const link = document.createElement('a');
-                link.href = url; link.download = `NNSE_${Date.now()}.wav`;
+                link.href = url; link.download = `NNSE_XL_${Date.now()}.wav`;
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
             }
         };
@@ -357,7 +412,6 @@
             else if (type == 0x3) latestPieData.encoder = data.getUint32(3, true) / 1000;
         }
 
-        // --- ORIGINAL PIE CHART ---
         setInterval(() => {
             if (document.getElementById('status').innerText !== "CONNECTED") return;
             
@@ -372,10 +426,11 @@
                 type: 'pie', 
                 marker: { colors: ['#00ff00', '#ffff00', '#0000ff'] } 
             }], { 
-                plot_bgcolor: '#111', 
-                paper_bgcolor: '#111', 
+                plot_bgcolor: '#141417', 
+                paper_bgcolor: '#141417', 
                 margin: {l:10,r:10,b:10,t:10}, 
-                font: {color:'#888', size:10} 
+                font: {color:'#888', size:10},
+                showlegend: false
             });
         }, 250);
 
@@ -394,7 +449,11 @@
                 });
             });
         };
-        document.getElementById('saveWavBtn').onclick = () => audioWorker.postMessage({ type: 'GENERATE_WAV' });
+        
+        document.getElementById('saveWavBtn').onclick = () => {
+            console.log("Requesting WAV download...");
+            audioWorker.postMessage({ type: 'GENERATE_WAV' });
+        };
     </script>
 </body>
 </html>
