@@ -19,7 +19,6 @@
     .widget-title { font-size: 11px; text-transform: uppercase; color: #666; border-left: 3px solid var(--neon); padding-left: 10px; }
     .select-opt { background: #000; color: #888; border: 1px solid #333; font-size: 10px; padding: 2px 5px; border-radius: 2px; cursor: pointer; }
 
-    /* LAYOUT: 2x2 GRID */
     .vis-container { 
         display: grid; 
         grid-template-columns: 1fr 40px; 
@@ -31,23 +30,9 @@
         min-width: 0; 
     }
     
-    #waveformCanvas { 
-        grid-column: 1 / 2; grid-row: 1 / 2;
-        width: 100%; height: 100%; 
-        display: block; background: #000; 
-    }
-    
-    #spectrogramCanvas { 
-        grid-column: 1 / 2; grid-row: 2 / 3;
-        width: 100%; height: 100%; 
-        display: block; background: #000; image-rendering: pixelated; 
-    }
-    
-    #legendCanvas { 
-        grid-column: 2 / 3; grid-row: 2 / 3;
-        width: 100%; height: 100%; 
-        display: block; background: #000; 
-    }
+    #waveformCanvas { grid-column: 1 / 2; grid-row: 1 / 2; width: 100%; height: 100%; display: block; background: #000; }
+    #spectrogramCanvas { grid-column: 1 / 2; grid-row: 2 / 3; width: 100%; height: 100%; display: block; background: #000; image-rendering: pixelated; }
+    #legendCanvas { grid-column: 2 / 3; grid-row: 2 / 3; width: 100%; height: 100%; display: block; background: #000; }
 
     .perf-metrics { margin-top: 10px; padding: 10px; background: #000; font-size: 10px; color: #555; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .perf-val { color: var(--neon); font-weight: bold; }
@@ -55,8 +40,15 @@
     .audio-container { grid-column: 1 / -1; background: #1a1a1e; padding: 10px; border-radius: 4px; }
     audio { width: 100%; filter: invert(100%); }
     
-    .export-btn { width: 100%; background: var(--red); color: #fff; border: none; padding: 12px; cursor: pointer; margin-top: 10px; font-weight: bold; text-transform: uppercase; border-radius: 4px; }
+    /* Layout for the buttons */
+    .controls-row { display: flex; gap: 10px; margin-top: 10px; }
+    .export-btn { flex: 2; background: var(--neon); color: #000; border: none; padding: 12px; cursor: pointer; font-weight: bold; text-transform: uppercase; border-radius: 4px; transition: all 0.2s; }
     .export-btn:active { transform: scale(0.98); }
+    .recording { background: var(--red) !important; color: #fff !important; }
+    
+    /* Replay Button Style */
+    #replayBtn { flex: 1; background: #333; color: var(--neon); border: 1px solid var(--neon); padding: 12px; cursor: pointer; font-weight: bold; text-transform: uppercase; border-radius: 4px; display: none; }
+    #replayBtn:hover { background: #444; }
   </style>
 </head>
 <body>
@@ -93,7 +85,11 @@
                     <button onclick="maxFrameTime=0; document.getElementById('peakTime').innerText='0'" style="font-size:9px; background:none; border:1px solid #444; color:#888; cursor:pointer; padding:2px 5px;">RESET</button>
                 </div>
             </div>
-            <button id="saveWavBtn" class="export-btn">Download .WAV Recording</button>
+
+            <div class="controls-row">
+                <button id="recordBtn" class="export-btn">Start Recording</button>
+                <button id="replayBtn">Replay Take</button>
+            </div>
         </div>
 
         <div class="widget">
@@ -102,6 +98,8 @@
         </div>
 
         <div class="audio-container"><audio controls id="monitor"></audio></div>
+        
+        <audio id="playbackElement" style="display:none"></audio>
     </div>
 
     <script src="serial.js"></script>
@@ -110,10 +108,11 @@
         const SAMPLE_RATE = 48000;
         const TOTAL_SAMPLES = SAMPLE_RATE * 6; 
         
-        let chunkNum = 0, currentGain = 1, maxFrameTime = 0;
+        let chunkNum = 0, currentGain = 1, maxFrameTime = 0, isRecording = false;
         let ringBuffer = new Float32Array(TOTAL_SAMPLES), writePtr = 0;
         let latestPieData = { inference: 0, encoder: 0, seEnabled: 0 };
         let spectroQueue = [];
+        let lastWavUrl = null;
 
         // FFT SETUP
         let CURRENT_FFT_SIZE = 512;
@@ -157,12 +156,7 @@
         }
 
         function createGradient() {
-            const stops = [
-                { pos: 0.00, hex: "#000004" }, { pos: 0.16, hex: "#160b39" }, 
-                { pos: 0.33, hex: "#420a68" }, { pos: 0.50, hex: "#932667" }, 
-                { pos: 0.67, hex: "#dd513a" }, { pos: 0.84, hex: "#fca50a" }, 
-                { pos: 1.00, hex: "#fcffa4" }  
-            ];
+            const stops = [{ pos: 0.00, hex: "#000004" }, { pos: 0.16, hex: "#160b39" }, { pos: 0.33, hex: "#420a68" }, { pos: 0.50, hex: "#932667" }, { pos: 0.67, hex: "#dd513a" }, { pos: 0.84, hex: "#fca50a" }, { pos: 1.00, hex: "#fcffa4" }];
             const lerp = (a, b, t) => a + (b - a) * t;
             stops.forEach(s => s.rgb = hexToRgb(s.hex));
             for (let i = 0; i < 256; i++) {
@@ -178,7 +172,6 @@
                 colorMap[i*4 + 2] = Math.floor(lerp(s1.rgb[2], s2.rgb[2], localT));
                 colorMap[i*4 + 3] = 255;
             }
-
             const lCanvas = document.getElementById('legendCanvas');
             const lCtx = lCanvas.getContext('2d');
             for (let y = 0; y < lCanvas.height; y++) {
@@ -234,8 +227,6 @@
             const dStart = performance.now();
             let processedChunks = 0;
             const specStart = performance.now();
-            
-            // Safety limit to prevent freeze
             const maxChunksPerFrame = 10;
             
             while (spectroQueue.length > 0 && processedChunks < maxChunksPerFrame) {
@@ -245,7 +236,6 @@
                 if (performance.now() - specStart > 12) break; 
             }
             const specEnd = performance.now();
-
             drawWaveform();
             const dEnd = performance.now();
 
@@ -267,13 +257,13 @@
             audioData.copyTo(ab, {planeIndex: 0});
             for (let i = 0; i < ab.length; i++) ab[i] *= currentGain;
             
-            audioWorker.postMessage({ type: 'RECORD_CHUNK', payload: ab });
+            audioWorker.postMessage({ type: 'PROCESS_CHUNK', payload: ab });
+            
             decoderController?.enqueue(audioData.duration);
             audioWriter.write(audioData).catch(()=>{});
 
             for (let i = 0; i < ab.length; i++) ringBuffer[(writePtr + i) % TOTAL_SAMPLES] = ab[i];
             writePtr = (writePtr + ab.length) % TOTAL_SAMPLES;
-
             spectroQueue.push(new Float32Array(ab));
         }
 
@@ -282,10 +272,8 @@
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.beginPath(); ctx.strokeStyle = '#FF355E'; ctx.lineWidth = 1;
-            
             const step = Math.floor(TOTAL_SAMPLES / 300); 
             const halfH = canvas.height / 2;
-
             for (let x = 0; x < 300; x++) {
                 let start = (writePtr + (x * step)) % TOTAL_SAMPLES;
                 let min = 1, max = -1;
@@ -303,22 +291,18 @@
         function updateSpectrogram(newChunk) {
             tempCtx.drawImage(specCanvas, 0, 0);
             specCtx.drawImage(tempCanvas, -1, 0); 
-
             const mags = computeFFT(newChunk);
             const h = specCanvas.height;
             const w = specCanvas.width;
             const visibleBins = Math.floor(DISPLAY_FREQ_MAX * CURRENT_FFT_SIZE / SAMPLE_RATE);
             const imgData = specCtx.createImageData(1, h);
             const data = imgData.data;
-
             for (let y = 0; y < h; y++) {
                 const binIdx = Math.floor((1 - (y / h)) * visibleBins);
                 if (binIdx < 0 || binIdx >= mags.length) continue;
-
                 let db = 20 * Math.log10(mags[binIdx] + 1e-6);
                 let normalized = (db - -80) / (10 - -80);
                 if (normalized < 0) normalized = 0; if (normalized > 1) normalized = 1;
-
                 const colorIdx = Math.floor(normalized * 255);
                 const pixelIndex = y * 4;
                 data[pixelIndex + 0] = colorMap[colorIdx * 4 + 0]; 
@@ -337,9 +321,20 @@
         
         audioWorker.onmessage = (e) => {
             if (e.data.type === 'WAV_BLOB') {
-                const url = URL.createObjectURL(e.data.blob);
+                if (lastWavUrl) URL.revokeObjectURL(lastWavUrl);
+                lastWavUrl = URL.createObjectURL(e.data.blob);
+                
+                // Show replay button
+                const replayBtn = document.getElementById('replayBtn');
+                replayBtn.style.display = 'block';
+                
+                // Set playback source
+                const player = document.getElementById('playbackElement');
+                player.src = lastWavUrl;
+
+                // Download
                 const link = document.createElement('a');
-                link.href = url; link.download = `NNSE_${Date.now()}.wav`;
+                link.href = lastWavUrl; link.download = `NNSE_${Date.now()}.wav`;
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
             }
         };
@@ -357,26 +352,13 @@
             else if (type == 0x3) latestPieData.encoder = data.getUint32(3, true) / 1000;
         }
 
-        // --- ORIGINAL PIE CHART ---
         setInterval(() => {
             if (document.getElementById('status').innerText !== "CONNECTED") return;
-            
             let myLat = (latestPieData.seEnabled == 0 ? 0 : latestPieData.inference / 1000) * 100;
             let myOpus = latestPieData.encoder * 50; 
             let idle = 1000 - myLat - myOpus;
             if (idle < 0) idle = 0;
-            
-            Plotly.react('SeLatency', [{ 
-                labels: ['AI', 'Enc', 'Idle'], 
-                values: [myLat, myOpus, idle], 
-                type: 'pie', 
-                marker: { colors: ['#00ff00', '#ffff00', '#0000ff'] } 
-            }], { 
-                plot_bgcolor: '#111', 
-                paper_bgcolor: '#111', 
-                margin: {l:10,r:10,b:10,t:10}, 
-                font: {color:'#888', size:10} 
-            });
+            Plotly.react('SeLatency', [{ labels: ['AI', 'Enc', 'Idle'], values: [myLat, myOpus, idle], type: 'pie', marker: { colors: ['#00ff00', '#ffff00', '#0000ff'] } }], { plot_bgcolor: '#111', paper_bgcolor: '#111', margin: {l:10,r:10,b:10,t:10}, font: {color:'#888', size:10} });
         }, 250);
 
         document.getElementById('pairButton').onclick = async () => {
@@ -384,17 +366,36 @@
             serial.requestPort().then(port => {
                 port.connect().then(() => {
                     port.onReceive = data => decodeAndDisplay(data);
-                    
                     document.getElementById('status').innerText = "CONNECTED";
                     const btn = document.getElementById('pairButton');
-                    btn.innerText = "LIVE";
-                    btn.style.background = "#FF355E"; 
-                    btn.style.color = "#fff";
-                    btn.disabled = true;
+                    btn.innerText = "LIVE"; btn.style.background = "#FF355E"; btn.style.color = "#fff"; btn.disabled = true;
                 });
             });
         };
-        document.getElementById('saveWavBtn').onclick = () => audioWorker.postMessage({ type: 'GENERATE_WAV' });
+
+        // RECORD BUTTON LOGIC
+        const recordBtn = document.getElementById('recordBtn');
+        recordBtn.onclick = () => {
+            if (!isRecording) {
+                audioWorker.postMessage({ type: 'START_RECORDING' });
+                isRecording = true;
+                recordBtn.innerText = "Stop Recording";
+                recordBtn.classList.add('recording');
+                document.getElementById('replayBtn').style.display = 'none';
+            } else {
+                audioWorker.postMessage({ type: 'GENERATE_WAV' });
+                isRecording = false;
+                recordBtn.innerText = "Start Recording";
+                recordBtn.classList.remove('recording');
+            }
+        };
+
+        // REPLAY BUTTON LOGIC
+        document.getElementById('replayBtn').onclick = () => {
+            const player = document.getElementById('playbackElement');
+            player.currentTime = 0;
+            player.play();
+        };
     </script>
 </body>
 </html>
