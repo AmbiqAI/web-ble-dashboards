@@ -10,7 +10,6 @@
     
     .dashboard, .offline-container { width: 1000px; display: grid; grid-template-columns: 1fr 1fr; grid-gap: 15px; }
     
-    /* Global Elements */
     .section-title { grid-column: 1 / -1; color: var(--neon); font-size: 14px; text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid #2a2a2e; padding-bottom: 10px; margin-bottom: 5px; }
     .header-bar { grid-column: 1 / -1; background: var(--w); border: 1px solid #2a2a2e; padding: 15px 25px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px; }
     #pairButton { background: var(--neon); border: none; color: #000; font-weight: bold; padding: 8px 24px; border-radius: 4px; cursor: pointer; }
@@ -20,13 +19,11 @@
     .widget-title { font-size: 11px; text-transform: uppercase; color: #666; border-left: 3px solid var(--neon); padding-left: 10px; }
     .select-opt { background: #000; color: #888; border: 1px solid #333; font-size: 10px; padding: 2px 5px; border-radius: 2px; cursor: pointer; }
 
-    /* Live Visualization */
     .vis-container { display: grid; grid-template-columns: 1fr 40px; grid-template-rows: 100px 100px; gap: 4px; background: #000; padding: 4px; border: 1px solid #333; }
     #waveformCanvas { grid-column: 1 / 2; grid-row: 1 / 2; width: 100%; height: 100%; background: #000; }
     #spectrogramCanvas { grid-column: 1 / 2; grid-row: 2 / 3; width: 100%; height: 100%; background: #000; image-rendering: pixelated; }
     #legendCanvas { grid-column: 2 / 3; grid-row: 2 / 3; width: 100%; height: 100%; background: #000; }
 
-    /* Controls */
     .perf-metrics { margin-top: 10px; padding: 10px; background: #000; font-size: 10px; color: #555; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .perf-val { color: var(--neon); font-weight: bold; }
     .controls-row { display: flex; gap: 10px; margin-top: 10px; }
@@ -34,16 +31,14 @@
     .recording { background: var(--red) !important; color: #fff !important; }
     #replayBtn { flex: 1; background: #333; color: var(--neon); border: 1px solid var(--neon); padding: 12px; border-radius: 4px; display: none; cursor: pointer; }
 
-    /* Offline Styles */
     .offline-container { grid-template-columns: 1fr; background: var(--w); border: 1px solid #2a2a2e; padding: 25px; border-radius: 4px; }
     .offline-box { background: #000; margin: 10px 0; padding: 15px; border-radius: 8px; border: 2px solid transparent; position: relative; opacity: 0.5; transition: 0.3s; }
     .offline-box.active { opacity: 1; border-color: var(--blue); }
     .label-tag { position: absolute; top: 5px; left: 10px; font-size: 10px; color: #888; text-transform: uppercase; z-index: 5; }
     .btn-group { display: flex; justify-content: center; gap: 10px; margin: 15px 0; }
-    .mode-btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; background: #333; color: #fff; flex: 1; }
-    .mode-btn.active-enh { background: #00d28a; color: #000; }
-    .mode-btn.active-noisy { background: #ff4d4d; color: #000; }
-    .play-btn-large { background: var(--blue); color: white; width: 100%; padding: 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 16px; }
+    .mode-btn { padding: 15px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; background: #333; color: #fff; flex: 1; font-size: 14px; transition: 0.2s; }
+    .mode-btn.active-enh { background: #00d28a; color: #000; box-shadow: 0 0 15px rgba(0, 210, 138, 0.3); }
+    .mode-btn.active-noisy { background: #ff4d4d; color: #000; box-shadow: 0 0 15px rgba(255, 77, 77, 0.3); }
     #sampleSelect { width: 100%; padding: 10px; background: #000; color: #fff; border: 1px solid #333; margin-bottom: 10px; border-radius: 4px; }
 
     .audio-container { grid-column: 1 / -1; background: #1a1a1e; padding: 10px; border-radius: 4px; }
@@ -115,11 +110,9 @@
             </div>
 
             <div class="btn-group">
-                <button id="btn0" class="mode-btn active-enh">LISTEN ENHANCED</button>
+                <button id="btn0" class="mode-btn">LISTEN ENHANCED</button>
                 <button id="btn1" class="mode-btn">LISTEN NOISY</button>
             </div>
-
-            <button id="playBtn" class="play-btn-large">PLAY / PAUSE SAMPLES</button>
         </div>
     </div>
 
@@ -302,7 +295,7 @@
     <script type="module">
         import WaveSurfer from 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js'
 
-        const SAMPLES_DIR = '/nnse-offline/samples/'; 
+        const SAMPLES_DIR = '/nnse-usb/samples/'; 
         const select = document.getElementById('sampleSelect');
         let currentOffChannel = 0;
 
@@ -335,22 +328,33 @@
             const b0 = bufferToWavBlob(fullBuf.getChannelData(0), fullBuf.sampleRate);
             const b1 = bufferToWavBlob(fullBuf.getChannelData(1), fullBuf.sampleRate);
             await Promise.all([wsEnh.loadBlob(b0), wsNoisy.loadBlob(b1)]);
+            // Reset UI state when new sample loads
+            document.getElementById('btn0').classList.remove('active-enh');
+            document.getElementById('btn1').classList.remove('active-noisy');
         };
 
-        window.togglePlayer = (idx) => {
-            const isPlaying = wsEnh.isPlaying() || wsNoisy.isPlaying();
+        window.togglePlayer = async (idx) => {
+            // Get current timestamp from whoever was playing (or just starting at 0)
             const time = currentOffChannel === 0 ? wsEnh.getCurrentTime() : wsNoisy.getCurrentTime();
-            wsEnh.pause(); wsNoisy.pause();
+            
+            // Stop both
+            wsEnh.pause(); 
+            wsNoisy.pause();
+            
             currentOffChannel = idx;
+            
+            // Update UI Styles
             document.getElementById('panel0').classList.toggle('active', idx === 0);
             document.getElementById('panel1').classList.toggle('active', idx === 1);
             document.getElementById('btn0').classList.toggle('active-enh', idx === 0);
             document.getElementById('btn1').classList.toggle('active-noisy', idx === 1);
+            
+            // Sync and Start the selected one
             const active = idx === 0 ? wsEnh : wsNoisy;
-            active.setTime(time); if (isPlaying) active.play();
+            active.setTime(time);
+            await active.play();
         }
 
-        document.getElementById('playBtn').onclick = () => { (currentOffChannel === 0 ? wsEnh : wsNoisy).playPause(); };
         document.getElementById('btn0').onclick = () => togglePlayer(0);
         document.getElementById('btn1').onclick = () => togglePlayer(1);
 
