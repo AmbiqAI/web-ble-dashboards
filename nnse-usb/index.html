@@ -280,11 +280,36 @@
             else { audioWorker.postMessage({ type: 'GENERATE_WAV' }); isRecording = false; recordBtn.innerText = "Start Recording"; recordBtn.classList.remove('recording'); }
         };
 
-        audioWorker.onmessage = (e) => {
+        // UPDATED: Handle the WAV blob and trigger Save Dialog
+        audioWorker.onmessage = async (e) => {
             if (e.data.type === 'WAV_BLOB') {
-                lastWavUrl = URL.createObjectURL(e.data.blob);
+                const blob = e.data.blob;
+                lastWavUrl = URL.createObjectURL(blob);
+                
+                // Update Replay Button
                 document.getElementById('replayBtn').style.display = 'block';
                 document.getElementById('playbackElement').src = lastWavUrl;
+
+                // TRIGGER "SAVE AS" DIALOG
+                try {
+                    if (window.showSaveFilePicker) {
+                        const handle = await window.showSaveFilePicker({
+                            suggestedName: `NNSE_Capture_${new Date().getTime()}.wav`,
+                            types: [{ description: 'WAV File', accept: {'audio/wav': ['.wav']} }],
+                        });
+                        const writable = await handle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                    } else {
+                        // Fallback for browsers without showSaveFilePicker
+                        const link = document.createElement('a');
+                        link.href = lastWavUrl;
+                        link.download = `NNSE_Capture_${new Date().getTime()}.wav`;
+                        link.click();
+                    }
+                } catch (err) {
+                    console.log("User cancelled save or error occurred:", err);
+                }
             }
         };
 
@@ -328,28 +353,18 @@
             const b0 = bufferToWavBlob(fullBuf.getChannelData(0), fullBuf.sampleRate);
             const b1 = bufferToWavBlob(fullBuf.getChannelData(1), fullBuf.sampleRate);
             await Promise.all([wsEnh.loadBlob(b0), wsNoisy.loadBlob(b1)]);
-            // Reset UI state when new sample loads
             document.getElementById('btn0').classList.remove('active-enh');
             document.getElementById('btn1').classList.remove('active-noisy');
         };
 
         window.togglePlayer = async (idx) => {
-            // Get current timestamp from whoever was playing (or just starting at 0)
             const time = currentOffChannel === 0 ? wsEnh.getCurrentTime() : wsNoisy.getCurrentTime();
-            
-            // Stop both
-            wsEnh.pause(); 
-            wsNoisy.pause();
-            
+            wsEnh.pause(); wsNoisy.pause();
             currentOffChannel = idx;
-            
-            // Update UI Styles
             document.getElementById('panel0').classList.toggle('active', idx === 0);
             document.getElementById('panel1').classList.toggle('active', idx === 1);
             document.getElementById('btn0').classList.toggle('active-enh', idx === 0);
             document.getElementById('btn1').classList.toggle('active-noisy', idx === 1);
-            
-            // Sync and Start the selected one
             const active = idx === 0 ? wsEnh : wsNoisy;
             active.setTime(time);
             await active.play();
