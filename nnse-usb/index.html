@@ -205,8 +205,19 @@
 
         function renderLoop() {
             const dStart = performance.now();
-            let processed = 0;
-            while (spectroQueue.length > 0 && processed < 10) { updateSpectrogram(spectroQueue.shift()); processed++; }
+            
+            // === FORCE RESET IF QUEUE TOO BIG ===
+            // This prevents "catch up" effects if the tab was hidden.
+            // If we have more than 3 chunks pending (approx 60ms), just jump to the latest.
+            if (spectroQueue.length > 3) {
+                spectroQueue = spectroQueue.slice(spectroQueue.length - 3);
+            }
+
+            // Process whatever is left in the queue (max 3 items)
+            while (spectroQueue.length > 0) { 
+                updateSpectrogram(spectroQueue.shift()); 
+            }
+            
             drawWaveform();
             document.getElementById('drawTime').innerText = (performance.now() - dStart).toFixed(2);
             requestAnimationFrame(renderLoop);
@@ -216,11 +227,22 @@
         async function handleAudio(audioData) {
             const ab = new Float32Array(960); audioData.copyTo(ab, {planeIndex: 0});
             for (let i = 0; i < ab.length; i++) ab[i] *= currentGain;
+            
+            // 1. Send to background worker for recording (ALWAYS do this)
             audioWorker.postMessage({ type: 'PROCESS_CHUNK', payload: ab });
+            
+            // 2. Play audio to speakers (ALWAYS do this)
             audioWriter.write(audioData).catch(()=>{});
+            
+            // 3. Update waveform buffer (ALWAYS do this)
             for (let i = 0; i < ab.length; i++) ringBuffer[(writePtr + i) % TOTAL_SAMPLES] = ab[i];
             writePtr = (writePtr + ab.length) % TOTAL_SAMPLES;
-            spectroQueue.push(new Float32Array(ab));
+            
+            // 4. Update Spectrogram Queue (ONLY IF VISIBLE)
+            // This prevents building up a massive backlog while the tab is hidden.
+            if (!document.hidden) {
+                spectroQueue.push(new Float32Array(ab));
+            }
         }
 
         function drawWaveform() {
@@ -270,6 +292,9 @@
 
         setInterval(() => {
             if (document.getElementById('status').innerText !== "CONNECTED") return;
+            // Only update Plotly if visible to save resources
+            if (document.hidden) return;
+            
             let ai = (latestPieData.seEnabled == 0 ? 0 : latestPieData.inference / 10);
             let enc = latestPieData.encoder * 50;
             Plotly.react('SeLatency', [{ labels: ['AI', 'Enc', 'Idle'], values: [ai, enc, 1000-ai-enc], type: 'pie', marker: { colors: ['#00ff00', '#ffff00', '#0000ff'] } }], { plot_bgcolor: '#111', paper_bgcolor: '#111', margin: {l:10,r:10,b:10,t:10}, font: {color:'#888', size:10} });
@@ -280,17 +305,14 @@
             else { audioWorker.postMessage({ type: 'GENERATE_WAV' }); isRecording = false; recordBtn.innerText = "Start Recording"; recordBtn.classList.remove('recording'); }
         };
 
-        // UPDATED: Handle the WAV blob and trigger Save Dialog
         audioWorker.onmessage = async (e) => {
             if (e.data.type === 'WAV_BLOB') {
                 const blob = e.data.blob;
                 lastWavUrl = URL.createObjectURL(blob);
                 
-                // Update Replay Button
                 document.getElementById('replayBtn').style.display = 'block';
                 document.getElementById('playbackElement').src = lastWavUrl;
 
-                // TRIGGER "SAVE AS" DIALOG
                 try {
                     if (window.showSaveFilePicker) {
                         const handle = await window.showSaveFilePicker({
@@ -301,7 +323,6 @@
                         await writable.write(blob);
                         await writable.close();
                     } else {
-                        // Fallback for browsers without showSaveFilePicker
                         const link = document.createElement('a');
                         link.href = lastWavUrl;
                         link.download = `NNSE_Capture_${new Date().getTime()}.wav`;
