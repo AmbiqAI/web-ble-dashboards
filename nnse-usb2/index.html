@@ -59,6 +59,27 @@
     .modal-controls { display: flex; justify-content: center; gap: 20px; }
     .close-btn { background: transparent; border: 1px solid #666; color: #888; padding: 5px 15px; cursor: pointer; border-radius: 4px; }
     .close-btn:hover { color: #fff; border-color: #fff; }
+
+    /* OFFLINE SECTION CSS */
+    .file-select { background: #000; color: var(--neon); border: 1px solid #333; padding: 8px; border-radius: 4px; font-family: 'Roboto Mono'; width: 300px; text-transform: uppercase; cursor: pointer; }
+    .folder-btn { background: #333; color: #fff; border: 1px solid #555; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; font-family: 'Roboto Mono'; transition: 0.2s; }
+    .folder-btn:hover { background: #444; border-color: var(--neon); color: var(--neon); }
+
+    .offline-vis-container {
+        display: flex; flex-direction: column; gap: 10px; margin-top: 15px;
+    }
+    .wave-wrapper {
+        background: #000; border: 1px solid #333; border-radius: 4px; position: relative;
+        padding: 5px;
+    }
+    .wave-label {
+        position: absolute; top: 5px; left: 5px; font-size: 10px; font-weight: bold; 
+        padding: 2px 6px; z-index: 10;
+    }
+    .loading-overlay {
+        position: absolute; top:0; left:0; width: 100%; height: 100%; background: rgba(0,0,0,0.7);
+        display: none; justify-content: center; align-items: center; color: var(--neon); z-index: 20;
+    }
 </style>
 </head>
 <body>
@@ -111,6 +132,41 @@
             </div>
             
             <audio controls id="monitor" style="display:none"></audio>
+        </div>
+    </div>
+
+    <div class="dashboard">
+        <header class="header-bar">
+            <div style="display:flex; align-items:center; gap:15px;">
+                <div style="color: var(--neon); font-weight: bold;">OFFLINE</div>
+                <button id="scanBtn" class="folder-btn">SCAN FOLDER</button>
+            </div>
+            
+            <select id="sampleSelect" class="file-select" disabled>
+                <option value="" disabled selected>NO FOLDER SCANNED</option>
+            </select>
+        </header>
+
+        <div class="widget">
+            <div class="offline-vis-container">
+                <div class="wave-wrapper" style="border-left: 3px solid var(--red);">
+                    <div class="wave-label" style="background: var(--red); color: #fff;">RAW (CH 2)</div>
+                    <div id="offWaveRaw"></div>
+                    <div id="loaderRaw" class="loading-overlay">LOADING...</div>
+                </div>
+
+                <div class="wave-wrapper" style="border-left: 3px solid var(--green);">
+                    <div class="wave-label" style="background: var(--green); color: #000;">ENHANCED (CH 1)</div>
+                    <div id="offWaveEnh"></div>
+                    <div id="loaderEnh" class="loading-overlay">LOADING...</div>
+                </div>
+            </div>
+
+            <div class="controls-row" style="margin-top:20px;">
+                <button id="offPlayRaw" class="replay-btn raw" disabled>PLAY RAW</button>
+                <button id="offPlayEnh" class="replay-btn enh" disabled>PLAY ENHANCED</button>
+                <button id="offStop" class="replay-btn" disabled>STOP</button>
+            </div>
         </div>
     </div>
 
@@ -245,20 +301,14 @@
                 audioTime += samplesPerFrame / SAMPLE_RATE;
 
             } else if (type === 0x2 || type === 0x3) { 
-                // EXPECTING: 7 Bytes total [Type(1), Len(1), Plat(1), Latency(4)]
-                // Latency starts at offset 3
                 if (dataView.byteLength >= 7) {
                     const lat = dataView.getUint32(3, true); 
                     
                     if (lat > 0 && lat < 1000000) {
-                        // Display Raw Latency
                         document.getElementById('aiLat').innerText = lat;
-                        
-                        // Display % Load
                         const percent = (lat / 10000.0) * 100;
                         const elLoad = document.getElementById('aiLoad');
                         elLoad.innerText = percent.toFixed(1) + "%";
-                        
                         if (percent > 100) elLoad.style.color = "var(--red)";
                         else elLoad.style.color = "var(--text)";
                     }
@@ -479,6 +529,214 @@
             a.href = urlStereo; 
             a.download = `NNSE_Capture_${Date.now()}.wav`; 
             a.click();
+        };
+
+        // ==========================================
+        // OFFLINE ANALYSIS LOGIC (FOLDER SCANNER)
+        // ==========================================
+
+        const scanBtn = document.getElementById('scanBtn');
+        const selectEl = document.getElementById('sampleSelect');
+        let directoryHandle = null;
+
+        scanBtn.onclick = async () => {
+            try {
+                directoryHandle = await window.showDirectoryPicker();
+                selectEl.innerHTML = '<option value="" disabled selected>SELECT A FILE...</option>';
+                let count = 0;
+                for await (const entry of directoryHandle.values()) {
+                    if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.wav')) {
+                        const opt = document.createElement('option');
+                        opt.value = entry.name; 
+                        opt.innerText = entry.name;
+                        selectEl.appendChild(opt);
+                        count++;
+                    }
+                }
+                if(count > 0) {
+                    selectEl.disabled = false;
+                    scanBtn.innerText = "FOLDER SCANNED (" + count + ")";
+                    scanBtn.style.borderColor = "var(--neon)";
+                    scanBtn.style.color = "var(--neon)";
+                } else {
+                    alert("No .wav files found in that folder.");
+                }
+            } catch (err) { console.error(err); }
+        };
+
+        let wsOfflineRaw = null;
+        let wsOfflineEnh = null;
+        let isOfflinePlaying = false;
+        
+        // GLOBAL AUDIO CONTEXT (Re-use to prevent 6 context limit crash)
+        let globalAudioCtx = null;
+        function getAudioContext() {
+            if (!globalAudioCtx) {
+                globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (globalAudioCtx.state === 'suspended') {
+                globalAudioCtx.resume();
+            }
+            return globalAudioCtx;
+        }
+
+        function initOfflinePlayers() {
+            const commonOpts = {
+                height: 100, barWidth: 2, cursorColor: '#fff', progressColor: '#fff', interact: true, normalize: true
+            };
+
+            // wsOfflineRaw = Red Box = Raw Channel (2)
+            wsOfflineRaw = WaveSurfer.create({
+                container: '#offWaveRaw',
+                waveColor: '#FF355E', 
+                ...commonOpts
+            });
+
+            // wsOfflineEnh = Green Box = Enh Channel (1)
+            wsOfflineEnh = WaveSurfer.create({
+                container: '#offWaveEnh',
+                waveColor: '#00d28a', 
+                ...commonOpts
+            });
+
+            // FIXED SYNC LOGIC: Only sync on 'interaction' (User click/drag)
+            // Removed 'seeking' event which caused feedback loop
+            const syncSeek = (wsSource, wsTarget) => {
+                wsSource.on('interaction', (newTime) => {
+                    // Sync the other player to the same time
+                    wsTarget.setTime(newTime);
+                });
+            };
+
+            syncSeek(wsOfflineRaw, wsOfflineEnh);
+            syncSeek(wsOfflineEnh, wsOfflineRaw);
+            
+            [wsOfflineRaw, wsOfflineEnh].forEach(ws => {
+                ws.on('finish', () => { isOfflinePlaying = false; });
+            });
+        }
+
+        initOfflinePlayers();
+
+        function bufferToWav(abuffer, len) {
+            let numOfChan = abuffer.numberOfChannels,
+            length = len * numOfChan * 2 + 44,
+            buffer = new ArrayBuffer(length),
+            view = new DataView(buffer),
+            channels = [], i, sample, offset = 0, pos = 0;
+
+            setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157); setUint32(0x20746d66); 
+            setUint32(16); setUint16(1); setUint16(numOfChan); setUint32(abuffer.sampleRate);
+            setUint32(abuffer.sampleRate * 2 * numOfChan); setUint16(numOfChan * 2); setUint16(16);
+            setUint32(0x61746164); setUint32(length - pos - 4);
+
+            for(i = 0; i < abuffer.numberOfChannels; i++) channels.push(abuffer.getChannelData(i));
+
+            while(pos < len) {
+                for(i = 0; i < numOfChan; i++) {
+                    sample = Math.max(-1, Math.min(1, channels[i][pos])); 
+                    sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0; 
+                    view.setInt16(44 + offset, sample, true);
+                    offset += 2;
+                }
+                pos++;
+            }
+            return new Blob([buffer], {type: "audio/wav"});
+            function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+            function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+        }
+
+        selectEl.addEventListener('change', async (e) => {
+            if(!directoryHandle) return;
+            const filename = e.target.value;
+
+            document.getElementById('loaderRaw').style.display = 'flex';
+            document.getElementById('loaderEnh').style.display = 'flex';
+            document.getElementById('offPlayRaw').disabled = true;
+            document.getElementById('offPlayEnh').disabled = true;
+            document.getElementById('offStop').disabled = true;
+
+            try {
+                const fileHandle = await directoryHandle.getFileHandle(filename);
+                const file = await fileHandle.getFile();
+                const arrayBuffer = await file.arrayBuffer();
+                
+                const audioCtx = getAudioContext(); // Use global reusable context
+                const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                
+                if(decodedBuffer.numberOfChannels < 2) {
+                    throw new Error(`File only has ${decodedBuffer.numberOfChannels} channels. 3-channel WAV required.`);
+                }
+
+                // CHANNEL MAPPING:
+                // Channel 1 (Index 0) = ENHANCED
+                // Channel 2 (Index 1) = RAW
+                // Channel 3 (Index 2) = Ignored
+                const enhData = decodedBuffer.getChannelData(0); 
+                const rawData = decodedBuffer.getChannelData(1); 
+
+                const enhMono = audioCtx.createBuffer(1, enhData.length, decodedBuffer.sampleRate);
+                enhMono.copyToChannel(enhData, 0);
+
+                const rawMono = audioCtx.createBuffer(1, rawData.length, decodedBuffer.sampleRate);
+                rawMono.copyToChannel(rawData, 0);
+
+                const enhBlob = bufferToWav(enhMono, enhData.length);
+                const rawBlob = bufferToWav(rawMono, rawData.length);
+                
+                const enhUrl = URL.createObjectURL(enhBlob);
+                const rawUrl = URL.createObjectURL(rawBlob);
+
+                // Load to correct players
+                // wsOfflineRaw = Red Box = Raw Channel
+                // wsOfflineEnh = Green Box = Enh Channel
+                await Promise.all([
+                    wsOfflineRaw.load(rawUrl),
+                    wsOfflineEnh.load(enhUrl)
+                ]);
+
+                document.getElementById('offPlayRaw').disabled = false;
+                document.getElementById('offPlayEnh').disabled = false;
+                document.getElementById('offStop').disabled = false;
+
+            } catch(err) {
+                alert("Error loading file: " + err.message);
+            } finally {
+                document.getElementById('loaderRaw').style.display = 'none';
+                document.getElementById('loaderEnh').style.display = 'none';
+            }
+        });
+
+        const btnOffPlayRaw = document.getElementById('offPlayRaw');
+        const btnOffPlayEnh = document.getElementById('offPlayEnh');
+        const btnOffStop = document.getElementById('offStop');
+
+        // Play RAW (Channel 2) -> Mute Enh Player
+        btnOffPlayRaw.onclick = () => {
+            getAudioContext().resume(); // FORCE RESUME on click
+            wsOfflineEnh.setMuted(true);
+            wsOfflineRaw.setMuted(false);
+            wsOfflineRaw.play();
+            wsOfflineEnh.play();
+            isOfflinePlaying = true;
+        };
+
+        // Play ENH (Channel 1) -> Mute Raw Player
+        btnOffPlayEnh.onclick = () => {
+            getAudioContext().resume(); // FORCE RESUME on click
+            wsOfflineRaw.setMuted(true);
+            wsOfflineEnh.setMuted(false);
+            wsOfflineRaw.play();
+            wsOfflineEnh.play();
+            isOfflinePlaying = true;
+        };
+
+        btnOffStop.onclick = () => {
+            wsOfflineRaw.pause();
+            wsOfflineEnh.pause();
+            wsOfflineRaw.seekTo(0);
+            wsOfflineEnh.seekTo(0);
+            isOfflinePlaying = false;
         };
 
     </script>
