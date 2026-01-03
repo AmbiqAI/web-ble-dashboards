@@ -117,8 +117,8 @@
 
             <div class="controls-row">
                 <div class="gain-container">
-                    <div class="gain-label"><span>DIGITAL GAIN</span><span id="gainVal" style="color:var(--neon); font-weight:bold;">0 dB</span></div>
-                    <input type="range" id="gainSlider" min="-20" max="40" value="0" step="1">
+                    <div class="gain-label"><span>DIGITAL GAIN</span><span id="gainVal" style="color:var(--neon); font-weight:bold;">+10 dB</span></div>
+                    <input type="range" id="gainSlider" min="-20" max="40" value="10" step="1">
                 </div>
                 <button id="recordBtn" class="export-btn">Start Recording</button>
             </div>
@@ -204,8 +204,10 @@
         let rxPtr = 0;
         let queueRaw = [];
         let queueEnh = [];
-        let currentGainDB = 0;
-        let currentGainFactor = 1.0;
+
+        // CHANGED: Initialize Gain to 10dB
+        let currentGainDB = 10;
+        let currentGainFactor = Math.pow(10, currentGainDB / 20.0);
 
         let urlStereo = null;
         let urlRaw = null;
@@ -599,18 +601,9 @@
                 ...commonOpts
             });
 
-            // FIXED SYNC LOGIC: Only sync on 'interaction' (User click/drag)
-            // Removed 'seeking' event which caused feedback loop
-            const syncSeek = (wsSource, wsTarget) => {
-                wsSource.on('interaction', (newTime) => {
-                    // Sync the other player to the same time
-                    wsTarget.setTime(newTime);
-                });
-            };
+            // INDEPENDENT PLAYBACK: No syncing logic here anymore.
+            // Players move independently.
 
-            syncSeek(wsOfflineRaw, wsOfflineEnh);
-            syncSeek(wsOfflineEnh, wsOfflineRaw);
-            
             [wsOfflineRaw, wsOfflineEnh].forEach(ws => {
                 ws.on('finish', () => { isOfflinePlaying = false; });
             });
@@ -695,6 +688,10 @@
                     wsOfflineEnh.load(enhUrl)
                 ]);
 
+                // Reset volumes to ensure no bleeding
+                wsOfflineRaw.setVolume(1.0);
+                wsOfflineEnh.setVolume(1.0);
+
                 document.getElementById('offPlayRaw').disabled = false;
                 document.getElementById('offPlayEnh').disabled = false;
                 document.getElementById('offStop').disabled = false;
@@ -711,24 +708,26 @@
         const btnOffPlayEnh = document.getElementById('offPlayEnh');
         const btnOffStop = document.getElementById('offStop');
 
-        // Play RAW (Channel 2) -> Mute Enh Player
+        // Play RAW ONLY (Channel 2)
         btnOffPlayRaw.onclick = () => {
-            getAudioContext().resume(); // FORCE RESUME on click
-            wsOfflineEnh.setMuted(true);
-            wsOfflineRaw.setMuted(false);
+            getAudioContext().resume();
+            
+            // Stop the other player
+            wsOfflineEnh.pause();
+            
+            // Play this one
             wsOfflineRaw.play();
-            wsOfflineEnh.play();
-            isOfflinePlaying = true;
         };
 
-        // Play ENH (Channel 1) -> Mute Raw Player
+        // Play ENH ONLY (Channel 1)
         btnOffPlayEnh.onclick = () => {
-            getAudioContext().resume(); // FORCE RESUME on click
-            wsOfflineRaw.setMuted(true);
-            wsOfflineEnh.setMuted(false);
-            wsOfflineRaw.play();
+            getAudioContext().resume();
+            
+            // Stop the other player
+            wsOfflineRaw.pause();
+            
+            // Play this one
             wsOfflineEnh.play();
-            isOfflinePlaying = true;
         };
 
         btnOffStop.onclick = () => {
@@ -736,7 +735,6 @@
             wsOfflineEnh.pause();
             wsOfflineRaw.seekTo(0);
             wsOfflineEnh.seekTo(0);
-            isOfflinePlaying = false;
         };
 
     </script>
