@@ -1,66 +1,54 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>NNSE | Pro Studio</title>
+  <title>NNSE | Pro Studio Master</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <style>
-    :root { --bg: #0a0a0b; --w: #141417; --neon: #d8f41d; --red: #FF355E; --text: #DAE3E3; }
+    :root { --bg: #0a0a0b; --w: #141417; --neon: #d8f41d; --red: #FF355E; --text: #DAE3E3; --blue: #3498db; }
     * { box-sizing: border-box; font-family: 'Roboto Mono', monospace; }
-    body { color: var(--text); background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
+    body { color: var(--text); background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 30px; }
     
-    .dashboard { width: 1000px; display: grid; grid-template-columns: 1fr 1fr; grid-gap: 15px; }
+    .dashboard, .offline-container { width: 1000px; display: grid; grid-template-columns: 1fr 1fr; grid-gap: 15px; }
     
+    .section-title { grid-column: 1 / -1; color: var(--neon); font-size: 14px; text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid #2a2a2e; padding-bottom: 10px; margin-bottom: 5px; }
     .header-bar { grid-column: 1 / -1; background: var(--w); border: 1px solid #2a2a2e; padding: 15px 25px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px; }
     #pairButton { background: var(--neon); border: none; color: #000; font-weight: bold; padding: 8px 24px; border-radius: 4px; cursor: pointer; }
     
     .widget { background: var(--w); border: 1px solid #2a2a2e; padding: 20px; border-radius: 4px; display: flex; flex-direction: column; }
-    
     .widget-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
     .widget-title { font-size: 11px; text-transform: uppercase; color: #666; border-left: 3px solid var(--neon); padding-left: 10px; }
     .select-opt { background: #000; color: #888; border: 1px solid #333; font-size: 10px; padding: 2px 5px; border-radius: 2px; cursor: pointer; }
 
-    /* LAYOUT: 2x2 GRID */
-    .vis-container { 
-        display: grid; 
-        grid-template-columns: 1fr 40px; 
-        grid-template-rows: 100px 100px; 
-        gap: 4px; 
-        background: #000; 
-        padding: 4px; 
-        border: 1px solid #333;
-        min-width: 0; 
-    }
-    
-    #waveformCanvas { 
-        grid-column: 1 / 2; grid-row: 1 / 2;
-        width: 100%; height: 100%; 
-        display: block; background: #000; 
-    }
-    
-    #spectrogramCanvas { 
-        grid-column: 1 / 2; grid-row: 2 / 3;
-        width: 100%; height: 100%; 
-        display: block; background: #000; image-rendering: pixelated; 
-    }
-    
-    #legendCanvas { 
-        grid-column: 2 / 3; grid-row: 2 / 3;
-        width: 100%; height: 100%; 
-        display: block; background: #000; 
-    }
+    .vis-container { display: grid; grid-template-columns: 1fr 40px; grid-template-rows: 100px 100px; gap: 4px; background: #000; padding: 4px; border: 1px solid #333; }
+    #waveformCanvas { grid-column: 1 / 2; grid-row: 1 / 2; width: 100%; height: 100%; background: #000; }
+    #spectrogramCanvas { grid-column: 1 / 2; grid-row: 2 / 3; width: 100%; height: 100%; background: #000; image-rendering: pixelated; }
+    #legendCanvas { grid-column: 2 / 3; grid-row: 2 / 3; width: 100%; height: 100%; background: #000; }
 
     .perf-metrics { margin-top: 10px; padding: 10px; background: #000; font-size: 10px; color: #555; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .perf-val { color: var(--neon); font-weight: bold; }
-    
+    .controls-row { display: flex; gap: 10px; margin-top: 10px; }
+    .export-btn { flex: 2; background: var(--neon); color: #000; border: none; padding: 12px; cursor: pointer; font-weight: bold; text-transform: uppercase; border-radius: 4px; }
+    .recording { background: var(--red) !important; color: #fff !important; }
+    #replayBtn { flex: 1; background: #333; color: var(--neon); border: 1px solid var(--neon); padding: 12px; border-radius: 4px; display: none; cursor: pointer; }
+
+    .offline-container { grid-template-columns: 1fr; background: var(--w); border: 1px solid #2a2a2e; padding: 25px; border-radius: 4px; }
+    .offline-box { background: #000; margin: 10px 0; padding: 15px; border-radius: 8px; border: 2px solid transparent; position: relative; opacity: 0.5; transition: 0.3s; }
+    .offline-box.active { opacity: 1; border-color: var(--blue); }
+    .label-tag { position: absolute; top: 5px; left: 10px; font-size: 10px; color: #888; text-transform: uppercase; z-index: 5; }
+    .btn-group { display: flex; justify-content: center; gap: 10px; margin: 15px 0; }
+    .mode-btn { padding: 15px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; background: #333; color: #fff; flex: 1; font-size: 14px; transition: 0.2s; }
+    .mode-btn.active-enh { background: #00d28a; color: #000; box-shadow: 0 0 15px rgba(0, 210, 138, 0.3); }
+    .mode-btn.active-noisy { background: #ff4d4d; color: #000; box-shadow: 0 0 15px rgba(255, 77, 77, 0.3); }
+    #sampleSelect { width: 100%; padding: 10px; background: #000; color: #fff; border: 1px solid #333; margin-bottom: 10px; border-radius: 4px; }
+
     .audio-container { grid-column: 1 / -1; background: #1a1a1e; padding: 10px; border-radius: 4px; }
     audio { width: 100%; filter: invert(100%); }
-    
-    .export-btn { width: 100%; background: var(--red); color: #fff; border: none; padding: 12px; cursor: pointer; margin-top: 10px; font-weight: bold; text-transform: uppercase; border-radius: 4px; }
-    .export-btn:active { transform: scale(0.98); }
   </style>
 </head>
 <body>
+
     <div class="dashboard">
+        <div class="section-title">Live Production Monitor</div>
         <header class="header-bar">
             <div style="color: var(--neon); font-weight: bold;">NNSE v2.0</div>
             <div id="status">DISCONNECTED</div>
@@ -88,12 +76,12 @@
             <div class="perf-metrics">
                 <div>Draw: <span id="drawTime" class="perf-val">0</span>ms</div>
                 <div>Spec: <span id="specTime" class="perf-val">0</span>ms</div>
-                <div style="grid-column: 1/-1; border-top: 1px solid #222; padding-top: 5px; display:flex; justify-content:space-between; align-items:center;">
-                    <span>PEAK: <span id="peakTime" style="color:var(--red)">0</span>ms</span>
-                    <button onclick="maxFrameTime=0; document.getElementById('peakTime').innerText='0'" style="font-size:9px; background:none; border:1px solid #444; color:#888; cursor:pointer; padding:2px 5px;">RESET</button>
-                </div>
             </div>
-            <button id="saveWavBtn" class="export-btn">Download .WAV Recording</button>
+
+            <div class="controls-row">
+                <button id="recordBtn" class="export-btn">Start Recording</button>
+                <button id="replayBtn">Replay Take</button>
+            </div>
         </div>
 
         <div class="widget">
@@ -104,35 +92,56 @@
         <div class="audio-container"><audio controls id="monitor"></audio></div>
     </div>
 
+    <div class="offline-container">
+        <div class="section-title">Offline Sample Comparison</div>
+        <div style="padding: 0 10px;">
+            <select id="sampleSelect">
+                <option>Scanning /samples/ folder...</option>
+            </select>
+
+            <div id="panel0" class="offline-box active">
+                <span class="label-tag">Channel 1: Enhanced</span>
+                <div id="wave-enhanced"></div>
+            </div>
+
+            <div id="panel1" class="offline-box">
+                <span class="label-tag">Channel 2: Noisy</span>
+                <div id="wave-noisy"></div>
+            </div>
+
+            <div class="btn-group">
+                <button id="btn0" class="mode-btn">LISTEN ENHANCED</button>
+                <button id="btn1" class="mode-btn">LISTEN NOISY</button>
+            </div>
+        </div>
+    </div>
+
+    <audio id="playbackElement" style="display:none"></audio>
+
     <script src="serial.js"></script>
     <script>
         const audioWorker = new Worker('worker.js');
         const SAMPLE_RATE = 48000;
         const TOTAL_SAMPLES = SAMPLE_RATE * 6; 
         
-        let chunkNum = 0, currentGain = 1, maxFrameTime = 0;
+        let chunkNum = 0, currentGain = 1, isRecording = false;
         let ringBuffer = new Float32Array(TOTAL_SAMPLES), writePtr = 0;
         let latestPieData = { inference: 0, encoder: 0, seEnabled: 0 };
         let spectroQueue = [];
+        let lastWavUrl = null;
 
-        // FFT SETUP
         let CURRENT_FFT_SIZE = 512;
         const DISPLAY_FREQ_MAX = 8000; 
         let windowTable, bitReverse, sinTable, cosTable, fftReal, fftImag;
 
         function setupFFT(size) {
             CURRENT_FFT_SIZE = size;
-            windowTable = new Float32Array(size);
-            bitReverse = new Uint16Array(size);
-            sinTable = new Float32Array(size);
-            cosTable = new Float32Array(size);
-            fftReal = new Float32Array(size);
-            fftImag = new Float32Array(size);
-
+            windowTable = new Float32Array(size); bitReverse = new Uint16Array(size);
+            sinTable = new Float32Array(size); cosTable = new Float32Array(size);
+            fftReal = new Float32Array(size); fftImag = new Float32Array(size);
             for(let i=0; i<size; i++) {
                 windowTable[i] = 0.54 - 0.46 * Math.cos((2 * Math.PI * i) / (size - 1));
-                sinTable[i] = Math.sin(-2 * Math.PI * i / size);
-                cosTable[i] = Math.cos(-2 * Math.PI * i / size);
+                sinTable[i] = Math.sin(-2 * Math.PI * i / size); cosTable[i] = Math.cos(-2 * Math.PI * i / size);
                 let m = Math.log2(size), n = i, r = 0;
                 for(let j=0; j<m; j++) { r = (r << 1) | (n & 1); n >>= 1; }
                 bitReverse[i] = r;
@@ -140,261 +149,268 @@
         }
         setupFFT(512);
 
-        document.getElementById('fftSelect').onchange = (e) => { setupFFT(parseInt(e.target.value)); };
-
         const specCanvas = document.getElementById('spectrogramCanvas');
         const specCtx = specCanvas.getContext('2d', { willReadFrequently: true });
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = specCanvas.width;
-        tempCanvas.height = specCanvas.height;
+        tempCanvas.width = specCanvas.width; tempCanvas.height = specCanvas.height;
         const tempCtx = tempCanvas.getContext('2d');
-
-        // Color Map & Legend
         const colorMap = new Uint8ClampedArray(256 * 4);
-        function hexToRgb(hex) {
-            let bigint = parseInt(hex.replace('#',''), 16);
-            return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
-        }
 
         function createGradient() {
-            const stops = [
-                { pos: 0.00, hex: "#000004" }, { pos: 0.16, hex: "#160b39" }, 
-                { pos: 0.33, hex: "#420a68" }, { pos: 0.50, hex: "#932667" }, 
-                { pos: 0.67, hex: "#dd513a" }, { pos: 0.84, hex: "#fca50a" }, 
-                { pos: 1.00, hex: "#fcffa4" }  
-            ];
-            const lerp = (a, b, t) => a + (b - a) * t;
+            const stops = [{ pos: 0.00, hex: "#000004" }, { pos: 0.16, hex: "#160b39" }, { pos: 0.33, hex: "#420a68" }, { pos: 0.50, hex: "#932667" }, { pos: 0.67, hex: "#dd513a" }, { pos: 0.84, hex: "#fca50a" }, { pos: 1.00, hex: "#fcffa4" }];
+            const hexToRgb = (hex) => [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
             stops.forEach(s => s.rgb = hexToRgb(s.hex));
             for (let i = 0; i < 256; i++) {
                 let t = i / 255;
                 let s1 = stops[0], s2 = stops[stops.length - 1];
-                for (let j = 0; j < stops.length - 1; j++) {
-                    if (t >= stops[j].pos && t <= stops[j+1].pos) { s1 = stops[j]; s2 = stops[j+1]; break; }
-                }
-                const range = s2.pos - s1.pos;
-                const localT = (t - s1.pos) / range;
-                colorMap[i*4 + 0] = Math.floor(lerp(s1.rgb[0], s2.rgb[0], localT));
-                colorMap[i*4 + 1] = Math.floor(lerp(s1.rgb[1], s2.rgb[1], localT));
-                colorMap[i*4 + 2] = Math.floor(lerp(s1.rgb[2], s2.rgb[2], localT));
-                colorMap[i*4 + 3] = 255;
+                for (let j = 0; j < stops.length - 1; j++) { if (t >= stops[j].pos && t <= stops[j+1].pos) { s1 = stops[j]; s2 = stops[j+1]; break; } }
+                const localT = (t - s1.pos) / (s2.pos - s1.pos);
+                for(let c=0; c<3; c++) colorMap[i*4+c] = Math.floor(s1.rgb[c] + (s2.rgb[c] - s1.rgb[c]) * localT);
+                colorMap[i*4+3] = 255;
             }
-
-            const lCanvas = document.getElementById('legendCanvas');
-            const lCtx = lCanvas.getContext('2d');
-            for (let y = 0; y < lCanvas.height; y++) {
-                let idx = Math.floor((1 - (y / lCanvas.height)) * 255);
-                let r = colorMap[idx*4+0], g = colorMap[idx*4+1], b = colorMap[idx*4+2];
-                lCtx.fillStyle = `rgb(${r},${g},${b})`;
+            const lCtx = document.getElementById('legendCanvas').getContext('2d');
+            for (let y = 0; y < 100; y++) {
+                let idx = Math.floor((1 - (y / 100)) * 255);
+                lCtx.fillStyle = `rgb(${colorMap[idx*4]},${colorMap[idx*4+1]},${colorMap[idx*4+2]})`;
                 lCtx.fillRect(0, y, 15, 1);
             }
-            lCtx.fillStyle = '#666'; lCtx.font = '9px monospace';
-            lCtx.fillText('+10', 18, 10);
-            lCtx.fillText('-35', 18, lCanvas.height/2 + 3);
-            lCtx.fillText('-80', 18, lCanvas.height - 2);
         }
         createGradient();
 
         function computeFFT(input) {
             const size = CURRENT_FFT_SIZE;
-            for(let i=0; i<size; i++) {
-                let rIdx = bitReverse[i];
-                let val = input[rIdx] || 0; 
-                fftReal[i] = val * windowTable[rIdx];
-                fftImag[i] = 0; 
-            }
+            for(let i=0; i<size; i++) { let rIdx = bitReverse[i]; fftReal[i] = (input[rIdx] || 0) * windowTable[rIdx]; fftImag[i] = 0; }
             for (let s = 2; s <= size; s *= 2) {
                 let half = s / 2, step = size / s;
                 for (let i = 0; i < size; i += s) {
                     for (let j = 0; j < half; j++) {
                         let k = j * step;
-                        let tReal = fftReal[i + j + half] * cosTable[k] - fftImag[i + j + half] * sinTable[k];
-                        let tImag = fftReal[i + j + half] * sinTable[k] + fftImag[i + j + half] * cosTable[k];
-                        fftReal[i + j + half] = fftReal[i + j] - tReal;
-                        fftImag[i + j + half] = fftImag[i + j] - tImag;
-                        fftReal[i + j] += tReal;
-                        fftImag[i + j] += tImag;
+                        let tR = fftReal[i+j+half]*cosTable[k] - fftImag[i+j+half]*sinTable[k];
+                        let tI = fftReal[i+j+half]*sinTable[k] + fftImag[i+j+half]*cosTable[k];
+                        fftReal[i+j+half] = fftReal[i+j] - tR; fftImag[i+j+half] = fftImag[i+j] - tI;
+                        fftReal[i+j] += tR; fftImag[i+j] += tI;
                     }
                 }
             }
             const mags = new Float32Array(size / 2);
-            for(let i=0; i<size/2; i++) mags[i] = Math.sqrt(fftReal[i]*fftReal[i] + fftImag[i]*fftImag[i]);
+            for(let i=0; i<size/2; i++) mags[i] = Math.sqrt(fftReal[i]**2 + fftImag[i]**2);
             return mags;
         }
 
         const audioDecoder = new AudioDecoder({output: handleAudio, error: console.error});
         audioDecoder.configure({ codec: "opus", sampleRate: SAMPLE_RATE, numberOfChannels: 1 });
-
         const generator = new MediaStreamTrackGenerator({ kind: 'audio' });
         const audioWriter = generator.writable.getWriter();
         document.getElementById('monitor').srcObject = new MediaStream([generator]);
-        let decoderController;
-        new ReadableStream({ start(c) { decoderController = c; } });
 
         function renderLoop() {
             const dStart = performance.now();
-            let processedChunks = 0;
-            const specStart = performance.now();
             
-            // Safety limit to prevent freeze
-            const maxChunksPerFrame = 10;
-            
-            while (spectroQueue.length > 0 && processedChunks < maxChunksPerFrame) {
-                const chunk = spectroQueue.shift();
-                updateSpectrogram(chunk);
-                processedChunks++;
-                if (performance.now() - specStart > 12) break; 
+            // === FORCE RESET IF QUEUE TOO BIG ===
+            // This prevents "catch up" effects if the tab was hidden.
+            // If we have more than 3 chunks pending (approx 60ms), just jump to the latest.
+            if (spectroQueue.length > 3) {
+                spectroQueue = spectroQueue.slice(spectroQueue.length - 3);
             }
-            const specEnd = performance.now();
 
+            // Process whatever is left in the queue (max 3 items)
+            while (spectroQueue.length > 0) { 
+                updateSpectrogram(spectroQueue.shift()); 
+            }
+            
             drawWaveform();
-            const dEnd = performance.now();
-
-            if (processedChunks > 0) {
-                document.getElementById('specTime').innerText = (specEnd - specStart).toFixed(2);
-                document.getElementById('drawTime').innerText = (dEnd - dStart).toFixed(2);
-                const total = dEnd - dStart;
-                if (total > maxFrameTime) { 
-                    maxFrameTime = total; 
-                    document.getElementById('peakTime').innerText = total.toFixed(2); 
-                }
-            }
+            document.getElementById('drawTime').innerText = (performance.now() - dStart).toFixed(2);
             requestAnimationFrame(renderLoop);
         }
-        requestAnimationFrame(renderLoop);
+        renderLoop();
 
         async function handleAudio(audioData) {
-            const ab = new Float32Array(960);
-            audioData.copyTo(ab, {planeIndex: 0});
+            const ab = new Float32Array(960); audioData.copyTo(ab, {planeIndex: 0});
             for (let i = 0; i < ab.length; i++) ab[i] *= currentGain;
             
-            audioWorker.postMessage({ type: 'RECORD_CHUNK', payload: ab });
-            decoderController?.enqueue(audioData.duration);
+            // 1. Send to background worker for recording (ALWAYS do this)
+            audioWorker.postMessage({ type: 'PROCESS_CHUNK', payload: ab });
+            
+            // 2. Play audio to speakers (ALWAYS do this)
             audioWriter.write(audioData).catch(()=>{});
-
+            
+            // 3. Update waveform buffer (ALWAYS do this)
             for (let i = 0; i < ab.length; i++) ringBuffer[(writePtr + i) % TOTAL_SAMPLES] = ab[i];
             writePtr = (writePtr + ab.length) % TOTAL_SAMPLES;
-
-            spectroQueue.push(new Float32Array(ab));
+            
+            // 4. Update Spectrogram Queue (ONLY IF VISIBLE)
+            // This prevents building up a massive backlog while the tab is hidden.
+            if (!document.hidden) {
+                spectroQueue.push(new Float32Array(ab));
+            }
         }
 
         function drawWaveform() {
-            const canvas = document.getElementById('waveformCanvas');
-            const ctx = canvas.getContext('2d');
+            const canvas = document.getElementById('waveformCanvas'); const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.beginPath(); ctx.strokeStyle = '#FF355E'; ctx.lineWidth = 1;
-            
-            const step = Math.floor(TOTAL_SAMPLES / 300); 
-            const halfH = canvas.height / 2;
-
+            ctx.beginPath(); ctx.strokeStyle = '#FF355E';
+            const step = Math.floor(TOTAL_SAMPLES / 300); const halfH = canvas.height / 2;
             for (let x = 0; x < 300; x++) {
                 let start = (writePtr + (x * step)) % TOTAL_SAMPLES;
                 let min = 1, max = -1;
-                for (let i = 0; i < step; i+=16) { 
-                    let s = ringBuffer[(start + i) % TOTAL_SAMPLES];
-                    if (s < min) min = s; if (s > max) max = s;
-                }
-                if (min > max) { min=0; max=0; }
-                ctx.moveTo(x, halfH + min * halfH); 
-                ctx.lineTo(x, halfH + max * halfH);
+                for (let i = 0; i < step; i+=16) { let s = ringBuffer[(start + i) % TOTAL_SAMPLES]; if (s < min) min = s; if (s > max) max = s; }
+                ctx.moveTo(x, halfH + min * halfH); ctx.lineTo(x, halfH + max * halfH);
             }
             ctx.stroke();
         }
 
-        function updateSpectrogram(newChunk) {
-            tempCtx.drawImage(specCanvas, 0, 0);
-            specCtx.drawImage(tempCanvas, -1, 0); 
-
-            const mags = computeFFT(newChunk);
-            const h = specCanvas.height;
-            const w = specCanvas.width;
-            const visibleBins = Math.floor(DISPLAY_FREQ_MAX * CURRENT_FFT_SIZE / SAMPLE_RATE);
+        function updateSpectrogram(chunk) {
+            tempCtx.drawImage(specCanvas, 0, 0); specCtx.drawImage(tempCanvas, -1, 0);
+            const mags = computeFFT(chunk); const h = specCanvas.height;
+            const bins = Math.floor(DISPLAY_FREQ_MAX * CURRENT_FFT_SIZE / SAMPLE_RATE);
             const imgData = specCtx.createImageData(1, h);
-            const data = imgData.data;
-
             for (let y = 0; y < h; y++) {
-                const binIdx = Math.floor((1 - (y / h)) * visibleBins);
-                if (binIdx < 0 || binIdx >= mags.length) continue;
-
-                let db = 20 * Math.log10(mags[binIdx] + 1e-6);
-                let normalized = (db - -80) / (10 - -80);
-                if (normalized < 0) normalized = 0; if (normalized > 1) normalized = 1;
-
-                const colorIdx = Math.floor(normalized * 255);
-                const pixelIndex = y * 4;
-                data[pixelIndex + 0] = colorMap[colorIdx * 4 + 0]; 
-                data[pixelIndex + 1] = colorMap[colorIdx * 4 + 1]; 
-                data[pixelIndex + 2] = colorMap[colorIdx * 4 + 2]; 
-                data[pixelIndex + 3] = 255; 
+                const bIdx = Math.floor((1 - (y / h)) * bins);
+                let db = 20 * Math.log10(mags[bIdx] + 1e-6);
+                let norm = Math.max(0, Math.min(1, (db + 80) / 90));
+                const cIdx = Math.floor(norm * 255);
+                imgData.data[y*4] = colorMap[cIdx*4]; imgData.data[y*4+1] = colorMap[cIdx*4+1];
+                imgData.data[y*4+2] = colorMap[cIdx*4+2]; imgData.data[y*4+3] = 255;
             }
-            specCtx.putImageData(imgData, w - 1, 0);
+            specCtx.putImageData(imgData, specCanvas.width - 1, 0);
         }
 
-        document.getElementById('gainSlider').oninput = (e) => { 
-            const db = parseFloat(e.target.value);
-            currentGain = Math.pow(10, db / 20); 
-            document.getElementById('gainVal').innerText = db; 
-        };
-        
-        audioWorker.onmessage = (e) => {
-            if (e.data.type === 'WAV_BLOB') {
-                const url = URL.createObjectURL(e.data.blob);
-                const link = document.createElement('a');
-                link.href = url; link.download = `NNSE_${Date.now()}.wav`;
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            }
+        document.getElementById('pairButton').onclick = () => {
+            serial.requestPort().then(p => p.connect().then(() => {
+                p.onReceive = d => {
+                    let type = d.getUint8(0);
+                    if (type == 0x4) audioDecoder.decode(new EncodedAudioChunk({type: "key", data: new DataView(d.buffer, d.byteOffset+3, d.getUint8(1)), timestamp: chunkNum++ * 20000, duration: 20000}));
+                    else if (type == 0x1) latestPieData.seEnabled = d.getUint8(3);
+                    else if (type == 0x2) latestPieData.inference = d.getUint32(3, true);
+                    else if (type == 0x3) latestPieData.encoder = d.getUint32(3, true) / 1000;
+                };
+                document.getElementById('status').innerText = "CONNECTED";
+                document.getElementById('pairButton').innerText = "LIVE";
+                document.getElementById('pairButton').style.background = "#FF355E";
+            }));
         };
 
-        function decodeAndDisplay(data) {
-            let type = data.getUint8(0);
-            if (type == 0x4) {
-                audioDecoder.decode(new EncodedAudioChunk({
-                    type: "key", data: new DataView(data.buffer, data.byteOffset + 3, data.getUint8(1)),
-                    timestamp: chunkNum * 20000, duration: 20000
-                }));
-                chunkNum++;
-            } else if (type == 0x1) latestPieData.seEnabled = data.getUint8(3);
-            else if (type == 0x2) latestPieData.inference = data.getUint32(3, true);
-            else if (type == 0x3) latestPieData.encoder = data.getUint32(3, true) / 1000;
-        }
-
-        // --- ORIGINAL PIE CHART ---
         setInterval(() => {
             if (document.getElementById('status').innerText !== "CONNECTED") return;
+            // Only update Plotly if visible to save resources
+            if (document.hidden) return;
             
-            let myLat = (latestPieData.seEnabled == 0 ? 0 : latestPieData.inference / 1000) * 100;
-            let myOpus = latestPieData.encoder * 50; 
-            let idle = 1000 - myLat - myOpus;
-            if (idle < 0) idle = 0;
-            
-            Plotly.react('SeLatency', [{ 
-                labels: ['AI', 'Enc', 'Idle'], 
-                values: [myLat, myOpus, idle], 
-                type: 'pie', 
-                marker: { colors: ['#00ff00', '#ffff00', '#0000ff'] } 
-            }], { 
-                plot_bgcolor: '#111', 
-                paper_bgcolor: '#111', 
-                margin: {l:10,r:10,b:10,t:10}, 
-                font: {color:'#888', size:10} 
-            });
+            let ai = (latestPieData.seEnabled == 0 ? 0 : latestPieData.inference / 10);
+            let enc = latestPieData.encoder * 50;
+            Plotly.react('SeLatency', [{ labels: ['AI', 'Enc', 'Idle'], values: [ai, enc, 1000-ai-enc], type: 'pie', marker: { colors: ['#00ff00', '#ffff00', '#0000ff'] } }], { plot_bgcolor: '#111', paper_bgcolor: '#111', margin: {l:10,r:10,b:10,t:10}, font: {color:'#888', size:10} });
         }, 250);
 
-        document.getElementById('pairButton').onclick = async () => {
-            spectroQueue.length = 0; 
-            serial.requestPort().then(port => {
-                port.connect().then(() => {
-                    port.onReceive = data => decodeAndDisplay(data);
-                    
-                    document.getElementById('status').innerText = "CONNECTED";
-                    const btn = document.getElementById('pairButton');
-                    btn.innerText = "LIVE";
-                    btn.style.background = "#FF355E"; 
-                    btn.style.color = "#fff";
-                    btn.disabled = true;
-                });
-            });
+        document.getElementById('recordBtn').onclick = () => {
+            if (!isRecording) { audioWorker.postMessage({ type: 'START_RECORDING' }); isRecording = true; recordBtn.innerText = "Stop Recording"; recordBtn.classList.add('recording'); }
+            else { audioWorker.postMessage({ type: 'GENERATE_WAV' }); isRecording = false; recordBtn.innerText = "Start Recording"; recordBtn.classList.remove('recording'); }
         };
-        document.getElementById('saveWavBtn').onclick = () => audioWorker.postMessage({ type: 'GENERATE_WAV' });
+
+        audioWorker.onmessage = async (e) => {
+            if (e.data.type === 'WAV_BLOB') {
+                const blob = e.data.blob;
+                lastWavUrl = URL.createObjectURL(blob);
+                
+                document.getElementById('replayBtn').style.display = 'block';
+                document.getElementById('playbackElement').src = lastWavUrl;
+
+                try {
+                    if (window.showSaveFilePicker) {
+                        const handle = await window.showSaveFilePicker({
+                            suggestedName: `NNSE_Capture_${new Date().getTime()}.wav`,
+                            types: [{ description: 'WAV File', accept: {'audio/wav': ['.wav']} }],
+                        });
+                        const writable = await handle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                    } else {
+                        const link = document.createElement('a');
+                        link.href = lastWavUrl;
+                        link.download = `NNSE_Capture_${new Date().getTime()}.wav`;
+                        link.click();
+                    }
+                } catch (err) {
+                    console.log("User cancelled save or error occurred:", err);
+                }
+            }
+        };
+
+        document.getElementById('replayBtn').onclick = () => { playbackElement.currentTime = 0; playbackElement.play(); };
+        document.getElementById('gainSlider').oninput = (e) => { currentGain = Math.pow(10, e.target.value / 20); gainVal.innerText = e.target.value; };
+    </script>
+
+    <script type="module">
+        import WaveSurfer from 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js'
+
+        const SAMPLES_DIR = '/nnse-usb/samples/'; 
+        const select = document.getElementById('sampleSelect');
+        let currentOffChannel = 0;
+
+        const wsEnh = WaveSurfer.create({ container: '#wave-enhanced', waveColor: '#00d28a', progressColor: '#008f5d', height: 100 });
+        const wsNoisy = WaveSurfer.create({ container: '#wave-noisy', waveColor: '#ff4d4d', progressColor: '#b33636', height: 100 });
+
+        async function scanFolder() {
+            try {
+                const response = await fetch(SAMPLES_DIR);
+                const html = await response.text();
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const links = Array.from(doc.querySelectorAll('a'));
+                select.innerHTML = '<option value="" disabled selected>-- Select Sample --</option>';
+                links.forEach(link => {
+                    const href = link.getAttribute('href');
+                    if (href.toLowerCase().endsWith('.wav')) {
+                        const opt = document.createElement('option');
+                        opt.value = href; opt.textContent = decodeURIComponent(href).split('/').pop();
+                        select.appendChild(opt);
+                    }
+                });
+            } catch (e) { select.innerHTML = '<option>Run server in samples folder</option>'; }
+        }
+
+        select.onchange = async () => {
+            const response = await fetch(SAMPLES_DIR + select.value);
+            const arrayBuffer = await response.arrayBuffer();
+            const audioCtx = new AudioContext();
+            const fullBuf = await audioCtx.decodeAudioData(arrayBuffer);
+            const b0 = bufferToWavBlob(fullBuf.getChannelData(0), fullBuf.sampleRate);
+            const b1 = bufferToWavBlob(fullBuf.getChannelData(1), fullBuf.sampleRate);
+            await Promise.all([wsEnh.loadBlob(b0), wsNoisy.loadBlob(b1)]);
+            document.getElementById('btn0').classList.remove('active-enh');
+            document.getElementById('btn1').classList.remove('active-noisy');
+        };
+
+        window.togglePlayer = async (idx) => {
+            const time = currentOffChannel === 0 ? wsEnh.getCurrentTime() : wsNoisy.getCurrentTime();
+            wsEnh.pause(); wsNoisy.pause();
+            currentOffChannel = idx;
+            document.getElementById('panel0').classList.toggle('active', idx === 0);
+            document.getElementById('panel1').classList.toggle('active', idx === 1);
+            document.getElementById('btn0').classList.toggle('active-enh', idx === 0);
+            document.getElementById('btn1').classList.toggle('active-noisy', idx === 1);
+            const active = idx === 0 ? wsEnh : wsNoisy;
+            active.setTime(time);
+            await active.play();
+        }
+
+        document.getElementById('btn0').onclick = () => togglePlayer(0);
+        document.getElementById('btn1').onclick = () => togglePlayer(1);
+
+        function bufferToWavBlob(channelData, sampleRate) {
+            const buffer = new ArrayBuffer(44 + channelData.length * 2);
+            const view = new DataView(buffer);
+            const writeString = (o, s) => { for (let i=0; i<s.length; i++) view.setUint8(o+i, s.charCodeAt(i)); };
+            writeString(0, 'RIFF'); view.setUint32(4, 36 + channelData.length * 2, true);
+            writeString(8, 'WAVE'); writeString(12, 'fmt '); view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+            writeString(36, 'data'); view.setUint32(40, channelData.length * 2, true);
+            for (let i = 0, offset = 44; i < channelData.length; i++, offset += 2) {
+                let s = Math.max(-1, Math.min(1, channelData[i]));
+                view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+        scanFolder();
     </script>
 </body>
 </html>

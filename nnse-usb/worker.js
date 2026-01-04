@@ -1,23 +1,34 @@
 let audioChunks = [];
+let recordingActive = false;
 
 onmessage = function(e) {
-    if (e.data.type === 'RECORD_CHUNK') {
-        // We must clone the array to keep it in the worker's memory
-        audioChunks.push(new Float32Array(e.data.payload));
+    if (e.data.type === 'START_RECORDING') {
+        audioChunks = []; // Reset the buffer for a fresh recording
+        recordingActive = true;
     } 
+
+    if (e.data.type === 'PROCESS_CHUNK') {
+        // Only push to buffer if recording is active
+        if (recordingActive) {
+            audioChunks.push(new Float32Array(e.data.payload));
+        }
+    }
     
     if (e.data.type === 'GENERATE_WAV') {
+        recordingActive = false; 
         if (audioChunks.length === 0) {
-            console.warn("No audio recorded yet.");
+            console.warn("No audio recorded.");
             return;
         }
         const blob = exportWAV(audioChunks, 48000);
         postMessage({ type: 'WAV_BLOB', blob: blob });
+        audioChunks = []; // Clear memory after export
     }
 };
 
 function exportWAV(chunks, sampleRate) {
-    const flat = new Float32Array(chunks.length * 960);
+    const totalSamples = chunks.length * 960;
+    const flat = new Float32Array(totalSamples);
     for (let i = 0; i < chunks.length; i++) {
         flat.set(chunks[i], i * 960);
     }
